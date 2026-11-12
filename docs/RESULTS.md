@@ -96,3 +96,14 @@ Foutanalyse (uit `oof_f3p.csv`; zelfde berekening als `hmsbest/analyze.py`):
 | fusion3_prior_global | fusie + smoothing naar globale stemverdeling | 0.602 | 0.293 | 0.288 | -0.006 op >=10: klein, gratis -> houden |
 | fusion3_votecond | fusie + annotator-conditionering | 0.661 | 0.296 | 0.288 | -0.005 op >=10, "all" slechter (voorspelt altijd in veel-stem-stijl); binnen ruis |
 | fusion3_siamese | fusie met hemisfeer-symmetrische takken | 0.673 | 0.347 | 0.338 | **mislukt** (+0.045): past bij de foutanalyse (lateralisatie is niet het knelpunt) en de halve beelden verliezen context -> schrappen |
+
+## Job 12 (Kaggle Version 10): scalogramtak in de fusie, fold 0, batch 32, prior global (referentie fusion3_prior_global 0.602 / 0.293 / 0.288)
+
+| run | takken | KL all | KL >=6 | KL >=10 | oordeel |
+|---|---|---|---|---|---|
+| fusion4_cwt | STFT-spec + 1D + eegimg + scalogram | 0.610 | 0.290 | 0.283 | -0.004 op >=10: binnen ruis, 59 min/fold (1.7x duurder) |
+| fusion3_cwt_noSpec | scalogram + 1D + eegimg | 0.610 | 0.295 | 0.287 | gelijk aan referentie: scalogram en STFT zijn uitwisselbaar in de fusie |
+
+Conclusie: de scalogramtak is los de beste, maar in de fusie levert ze nauwelijks iets extra; LRDA/GRDA -> other blijft
+(LRDA 0.35, GRDA 0.42 op other). Op B0 met 6+3 epochs zit fold 0 vast rond 0.283-0.293 ongeacht de representatie:
+de volgende hefbomen zijn labels (teacher, job 11), capaciteit/trainingsduur (job 13) en het ensemble.
