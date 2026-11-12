@@ -43,3 +43,11 @@ gecontroleerd en worden enkel als orde van grootte gebruikt (topoplossingen ~0.2
 6. Pseudo-labelling / label-smoothing van laagconsensus-vensters.
 7. Ensemble (gewichten via OOF, `hmsbest.ensemble`) en TTA.
 Gefaalde experimenten worden ook gelogd.
+
+## Aanvullende bronbevindingen (2e-plaatsoplossing, via de blog van yuto; de blog is zelf inconsistent over ensemblegewichten)
+- Ruwe EEG als 2D-beeld: 16 kanalen x 10 000 samples herschikt naar 160 x 1000, gefilterd 0.5-20 Hz, voorgetrainde
+  EfficientNet-B5. Dit was daar het sterkste enkelvoudige model (zelf gerapporteerd private ~0.283). -> `eegimg` in `models.py`.
+- Doelwaarden gemiddeld per eeg_id bij een willekeurig gekozen venster (label-ruis verlagen). -> `target_mean_w` in `dataset.py`.
+- Stap 1: 15 epochs, loss-gewicht voters/20; stap 2: 5 epochs, lr 1e-4, alleen >= 6 annotators; 10-fold CV, validatie op >= 6.
+- Ensemble van 6 modellen (spectrogram, ruwe EEG, gemengd) gaf slechts een kleine winst (~0.28 -> 0.27 private).
+Eigen vaststellingen: de testset heeft 3-20 annotators (competitiepagina), dus naast >= 6 wordt ook "alle" gerapporteerd.

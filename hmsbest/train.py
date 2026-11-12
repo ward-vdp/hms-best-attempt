@@ -94,7 +94,8 @@ def predict(model, loader, dev, tta=True):
 
 def run_fold(cfg, df, fold, dev, out_dir):
     tr, va = df[df.fold != fold], df[df.fold == fold]
-    dkw = dict(cache_dir=cfg["cache_dir"], spec_rows=cfg.get("spec_rows", 300), filt=cfg.get("filt", True))
+    dkw = dict(cache_dir=cfg["cache_dir"], spec_rows=cfg.get("spec_rows", 300), filt=cfg.get("filt", True),
+               eeg_hi=cfg.get("eeg_hi", 40.0))
     val_ds = HMSDataset(va, mode="eval", **dkw)
     nw = cfg.get("num_workers", 4)
     val_loader = DataLoader(val_ds, batch_size=cfg["batch_size"] * 2, num_workers=nw)
@@ -107,7 +108,8 @@ def run_fold(cfg, df, fold, dev, out_dir):
     scaler = torch.amp.GradScaler(enabled=dev.type == "cuda")
     t0 = time.time()
     for si, st in enumerate(cfg["stages"]):
-        ds = HMSDataset(tr, mode="train", min_votes=st.get("min_votes", 0), **dkw)
+        ds = HMSDataset(tr, mode="train", min_votes=st.get("min_votes", 0),
+                        target_mean_w=cfg.get("target_mean_w", 0.0), **dkw)
         loader = DataLoader(ds, batch_size=cfg["batch_size"], shuffle=True, num_workers=nw,
                             drop_last=True, pin_memory=dev.type == "cuda", persistent_workers=nw > 0)
         steps = st["epochs"] * len(loader)

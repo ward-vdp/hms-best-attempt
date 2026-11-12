@@ -11,8 +11,15 @@ def _stack_regions(x):
     return torch.cat(list(x.unbind(1)), dim=1).unsqueeze(1)
 
 
+def eeg_image(eeg):
+    """(B, 16, 10000) raw bipolar EEG -> (B, 1, 160, 1000): each channel cut into 10 rows of 1000 samples (idea: 2nd-place
+    HMS solution, see docs/PLAN.md), standardised per sample."""
+    x = eeg.reshape(eeg.shape[0], 1, 160, 1000)
+    return (x - x.mean(dim=(1, 2, 3), keepdim=True)) / (x.std(dim=(1, 2, 3), keepdim=True) + 1e-4)
+
+
 class ImageNet(nn.Module):
-    """2D CNN on a spectrogram image. source='spec' (Kaggle) or 'eegspec' (computed from the EEG)."""
+    """2D CNN on an image. source='spec' (Kaggle spectrogram), 'eegspec' (STFT computed from the EEG) or 'eegimg' (raw EEG)."""
 
     def __init__(self, source="spec", backbone="efficientnet_b0", pretrained=True, drop=0.3, drop_path=0.1, mask=0):
         super().__init__()
@@ -21,11 +28,16 @@ class ImageNet(nn.Module):
         self.net = timm.create_model(backbone, pretrained=pretrained, in_chans=1, num_classes=6,
                                      drop_rate=drop, drop_path_rate=drop_path)
 
-    def forward(self, batch):
+    def image(self, batch):
+        if self.source == "eegimg":
+            return eeg_image(batch["eeg"])
         x = self.espec(batch["eeg"]) if self.source == "eegspec" else batch["spec"]
         if self.training and self.mask:
             x = spec_mask(x, self.mask)
-        return self.net(_stack_regions(x))
+        return _stack_regions(x)
+
+    def forward(self, batch):
+        return self.net(self.image(batch))
 
 
 class ResBlock1d(nn.Module):
@@ -80,10 +92,7 @@ class Fusion(nn.Module):
     @staticmethod
     def _feat(p, batch):
         if isinstance(p, ImageNet):
-            x = p.espec(batch["eeg"]) if p.source == "eegspec" else batch["spec"]
-            if p.training and p.mask:
-                x = spec_mask(x, p.mask)
-            return p.net.forward_head(p.net.forward_features(_stack_regions(x)), pre_logits=True)
+            return p.net.forward_head(p.net.forward_features(p.image(batch)), pre_logits=True)
         x = p.blocks(p.stem(batch["eeg"]))
         x, _ = p.gru(x.transpose(1, 2))
         return torch.cat([x.mean(1), x.amax(1)], dim=1)
@@ -94,7 +103,7 @@ class Fusion(nn.Module):
 
 def build_model(cfg: dict) -> nn.Module:
     kind = cfg["kind"]
-    if kind in ("spec", "eegspec"):
+    if kind in ("spec", "eegspec", "eegimg"):
         return ImageNet(kind, cfg.get("backbone", "efficientnet_b0"), cfg.get("pretrained", True),
                         cfg.get("drop", 0.3), cfg.get("drop_path", 0.1), cfg.get("mask", 0))
     if kind == "eeg1d":

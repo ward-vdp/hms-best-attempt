@@ -64,13 +64,18 @@ def main():
     out = np.zeros((len(test), 6), np.float64)
     for s in range(0, len(test), a.bs):
         rows = test.iloc[s:s + a.bs]
-        eeg, spec = [], []
+        raw_e, spec = [], []
         for _, r in rows.iterrows():
-            e = eeg_bipolar(pd.read_parquet(f"{a.data_root}/test_eegs/{r.eeg_id}.parquet"))
+            raw_e.append(eeg_bipolar(pd.read_parquet(f"{a.data_root}/test_eegs/{r.eeg_id}.parquet")))
             sp = spec_log(pd.read_parquet(f"{a.data_root}/test_spectrograms/{r.spectrogram_id}.parquet"))
-            eeg.append(eeg_window(e, 0.0)); spec.append(spec_window(sp, 0.0))
-        batch = dict(eeg=torch.from_numpy(np.stack(eeg)).to(dev), spec=torch.from_numpy(np.stack(spec)).to(dev))
+            spec.append(spec_window(sp, 0.0))
+        spec_t = torch.from_numpy(np.stack(spec)).to(dev)
+        eeg_by_hi = {}          # experiments may use different EEG low-pass cut-offs
         for cfg, models, w in exps:
+            hi = float(cfg.get("eeg_hi", 40.0))
+            if hi not in eeg_by_hi:
+                eeg_by_hi[hi] = torch.from_numpy(np.stack([eeg_window(e, 0.0, hi=hi) for e in raw_e])).to(dev)
+            batch = dict(eeg=eeg_by_hi[hi], spec=spec_t)
             out[s:s + len(rows)] += w / wsum * predict_batch(models, batch, cfg.get("tta", True)).cpu().numpy()
     out = out / out.sum(1, keepdims=True)
     sub = pd.DataFrame(out, columns=[f"{c}_vote" for c in CLASSES]); sub.insert(0, "eeg_id", test.eeg_id.values)

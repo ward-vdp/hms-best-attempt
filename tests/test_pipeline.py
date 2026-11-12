@@ -112,3 +112,18 @@ def test_mask_and_mixup():
     assert torch.allclose(out["y"].sum(1), torch.ones(4), atol=1e-5)
     m = build_model(dict(kind="spec", backbone="efficientnet_b0", pretrained=False, mask=2)).train()
     assert m(dict(spec=torch.randn(2, 4, 100, 300))).shape == (2, 6)
+
+
+def test_eegimg_model_and_target_mean(fake_root, cache):
+    df = assign_folds(load_train_meta(fake_root / "train.csv"), 5, 42)
+    ds = HMSDataset(df, str(cache), "train", target_mean_w=0.5, eeg_hi=20.0)
+    it = ds[0]
+    assert it["y"].shape == (6,) and abs(float(it["y"].sum()) - 1) < 1e-5
+    ev = HMSDataset(df, str(cache), "eval", target_mean_w=0.5)          # eval labels must stay the window labels
+    assert ev.tw == 0.0
+    b = torch.utils.data.default_collate([ds[0], ds[1]])
+    for c in (dict(kind="eegimg", backbone="efficientnet_b0", pretrained=False),
+              dict(kind="fusion", parts=[dict(kind="eegimg", backbone="efficientnet_b0", pretrained=False),
+                                         dict(kind="eegspec", backbone="efficientnet_b0", pretrained=False, mask=2)])):
+        m = build_model(c).train()
+        assert m(b).shape == (2, 6)
