@@ -127,3 +127,19 @@ def test_eegimg_model_and_target_mean(fake_root, cache):
                                          dict(kind="eegspec", backbone="efficientnet_b0", pretrained=False, mask=2)])):
         m = build_model(c).train()
         assert m(b).shape == (2, 6)
+
+
+def test_label_smoothing_and_shift(fake_root, cache):
+    df = assign_folds(load_train_meta(fake_root / "train.csv"), 5, 42)
+    base = HMSDataset(df, str(cache), "train")
+    ds = HMSDataset(df, str(cache), "train", label_smooth=0.02, shift_s=5.0)
+    for i in range(3):
+        it = ds[i]
+        assert abs(float(it["y"].sum()) - 1) < 1e-5 and it["eeg"].shape == (16, 10000)
+        assert torch.isfinite(it["eeg"]).all()
+    # smoothing pulls a pure label towards uniform, more so for few votes
+    y, n = np.array([1, 0, 0, 0, 0, 0], np.float32), 3.0
+    ys = (y * n + 0.02) / (n + 6 * 0.02)
+    assert ys[0] < 1 and ys[1] > 0
+    ev = HMSDataset(df, str(cache), "eval", label_smooth=0.02, shift_s=5.0)
+    assert ev.ls == 0.0 and ev.shift == 0.0

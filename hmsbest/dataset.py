@@ -4,18 +4,21 @@ import pandas as pd
 import torch
 from torch.utils.data import Dataset
 
-from .constants import TARGET_COLS
+from .constants import EEG_LEN, FS, TARGET_COLS
 from .signal import eeg_window, spec_window
 
 
 class HMSDataset(Dataset):
     def __init__(self, rows: pd.DataFrame, cache_dir: str, mode: str = "train",
                  min_votes: int = 0, spec_rows: int = 300, filt: bool = True, eeg_hi: float = 40.0,
-                 target_mean_w: float = 0.0):
+                 target_mean_w: float = 0.0, label_smooth: float = 0.0, shift_s: float = 0.0):
         assert mode in ("train", "eval")
         self.cache, self.mode, self.spec_rows, self.filt = cache_dir, mode, spec_rows, filt
         self.eeg_hi = eeg_hi
         self.tw = target_mean_w if mode == "train" else 0.0   # train only: blend window label with the eeg_id-mean label
+        # train only: +label_smooth to every vote BEFORE normalising (low-vote labels get smoothed more; Team Sony)
+        self.ls = label_smooth if mode == "train" else 0.0
+        self.shift = shift_s if mode == "train" else 0.0   # train only: random +-shift_s time shift of the EEG window
         r = rows[rows.n_votes >= min_votes] if mode == "train" else rows
         self.groups = []
         for eeg_id, g in r.groupby("eeg_id", sort=True):
@@ -39,9 +42,15 @@ class HMSDataset(Dataset):
         k = self.eval_pick[i] if self.mode == "eval" else int(torch.randint(len(g["n"]), (1,)))
         eeg = np.load(f"{self.cache}/eeg/{g['eeg_id']}.npy", mmap_mode="r")
         spec = np.load(f"{self.cache}/spec/{g['spec_id']}.npy", mmap_mode="r")
+        off = float(g["eeg_off"][k])
+        if self.shift > 0:
+            off = float(np.clip(off + (float(torch.rand(1)) * 2 - 1) * self.shift, 0.0, max(0.0, eeg.shape[1] / FS - EEG_LEN / FS)))
+        y, n = (1 - self.tw) * g["y"][k] + self.tw * g["y_mean"], (1 - self.tw) * g["n"][k] + self.tw * g["n_mean"]
+        if self.ls > 0:
+            y = (y * n + self.ls) / (n + len(TARGET_COLS) * self.ls)
         return dict(
-            eeg=torch.from_numpy(eeg_window(eeg, g["eeg_off"][k], lo=0.5 if self.filt else None, hi=self.eeg_hi)),
+            eeg=torch.from_numpy(eeg_window(eeg, off, lo=0.5 if self.filt else None, hi=self.eeg_hi)),
             spec=torch.from_numpy(spec_window(spec, g["spec_off"][k], self.spec_rows)),
-            y=torch.from_numpy((1 - self.tw) * g["y"][k] + self.tw * g["y_mean"]),
-            n=torch.tensor((1 - self.tw) * g["n"][k] + self.tw * g["n_mean"]),
+            y=torch.from_numpy(y.astype(np.float32)),
+            n=torch.tensor(float(n)),
             eeg_id=g["eeg_id"])
