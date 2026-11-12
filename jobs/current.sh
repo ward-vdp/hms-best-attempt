@@ -1,4 +1,6 @@
-# Job 13 (background, ~1h15): capaciteit en trainingsduur op fold 0 (referentie fusion3_prior_global 0.602/0.293/0.288).
+# Job 14 (background, ~4h30): lekvrije 5-fold met teacher-verfijnde labels.
+# Ronde 1: 10 paar-teachers T{S,G} (getraind zonder folds S en G), elk schrijft out-of-fold-voorspellingen voor fold G
+#          (bruikbaar voor student S) en fold S (bruikbaar voor student G). Ronde 2: 5 studenten, teacher-labels in stap 1.
 export PYTHONPATH=/kaggle/working/repo
 D=$(dirname "$(find /kaggle/input -maxdepth 4 -name train.csv | head -1)")
 C=/kaggle/temp/cache
@@ -13,13 +15,27 @@ progress() { sleep 45; while pgrep -f hmsbest.train > /dev/null; do sleep 180; e
 T='label_smooth=0.02 shift_s=5.0 target_mean_w=0.5 label_prior=global'
 SP='{kind: eegspec, backbone: efficientnet_b0, pretrained: true, mask: 2}'
 IM='{kind: eegimg, backbone: efficientnet_b0, pretrained: true}'
-SP2='{kind: eegspec, backbone: efficientnet_b2, pretrained: true, mask: 2}'
-IM2='{kind: eegimg, backbone: efficientnet_b2, pretrained: true}'
-run fusion3_b2 0 "model={kind: fusion, parts: [$SP2, {kind: eeg1d}, $IM2]}" eeg_hi=40.0 $T batch_size=32
-run fusion3_b0_long 1 "model={kind: fusion, parts: [$SP, {kind: eeg1d}, $IM]}" eeg_hi=40.0 $T 'stages=[{epochs: 10, lr: 1.0e-3, min_votes: 0, weight: votes}, {epochs: 4, lr: 1.0e-4, min_votes: 6, weight: none}]'
-progress
+M="model={kind: fusion, parts: [$SP, {kind: eeg1d}, $IM]}"
+R=/kaggle/working/runs
+pair() { # gpu excluded_fold folds
+  CUDA_VISIBLE_DEVICES=$1 python -u -m hmsbest.train --config configs/spec_b0.yaml --set name=pair_e$2 data_root=$D cache_dir=$C "run_folds=$3" "exclude_folds=[$2]" save_row_preds=true num_workers=2 "$ST" "$M" eeg_hi=40.0 $T > /kaggle/working/logs/pair_e$2.txt 2>&1
+}
+( pair 0 0 '[1,2,3,4]'; pair 0 3 '[4]' ) &
+( pair 1 1 '[2,3,4]'; pair 1 2 '[3,4]' ) &
+progress; wait
+ls $R/pair_*/rows_for*.csv | wc -l
+stud() { # gpu fold
+  CUDA_VISIBLE_DEVICES=$1 python -u -m hmsbest.train --config configs/spec_b0.yaml --set name=stud_f$2 data_root=$D cache_dir=$C "run_folds=[$2]" num_workers=2 "$M" eeg_hi=40.0 $T "teacher_csv=$R/pair_*/rows_for$2_*.csv" 'stages=[{epochs: 6, lr: 1.0e-3, min_votes: 0, weight: votes}, {epochs: 3, lr: 1.0e-4, min_votes: 6, weight: none, teacher_tau: 0}]' > /kaggle/working/logs/stud_f$2.txt 2>&1
+}
+( stud 0 0; stud 0 2; stud 0 4 ) &
+( stud 1 1; stud 1 3 ) &
+progress; wait
 cut -c1-130 /kaggle/working/results.csv
-for n in fusion3_b2 fusion3_b0_long; do python -m hmsbest.analyze /kaggle/working/runs/$n/oof.csv | head -4; done
-for f in /kaggle/working/logs/*.txt; do echo "== $f"; tail -n 6 $f | cut -c1-200; done
-mkdir -p /kaggle/working/keep && for d in /kaggle/working/runs/*/; do cp $d/oof.csv /kaggle/working/keep/$(basename $d)_oof.csv 2>/dev/null; done
+grep -h "teacher:" /kaggle/working/logs/stud_f*.txt
+python - <<'PY'
+import pandas as pd
+pd.concat([pd.read_csv(f"/kaggle/working/runs/stud_f{f}/oof.csv") for f in range(5)], ignore_index=True).to_csv("/kaggle/working/oof_teacher5.csv", index=False)
+PY
+python -m hmsbest.analyze /kaggle/working/oof_teacher5.csv
+for f in /kaggle/working/logs/stud_f*.txt; do echo "== $f"; tail -n 3 $f | cut -c1-200; done
 rm -rf /kaggle/working/runs/*/fold*.pt
