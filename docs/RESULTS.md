@@ -119,3 +119,13 @@ Teachers: 4 modellen die fold 0 nooit zagen (elk op 60 % van de data). Geschatte
 
 Verbetering bij stud_s1 zit vooral bij LPD (KL dominant 0.371 -> 0.334) en de 15+-stem-rijen (0.271 -> 0.250).
 Conclusie: teacher-labels als betere voortraining (stap 1), daarna nog steeds specialiseren op veel-stem-rijen.
+
+## Job 13 (Kaggle Version 11): capaciteit en trainingsduur, fold 0 (referentie fusion3_prior_global 0.602 / 0.293 / 0.288)
+
+| run | wat | KL all | KL >=6 | KL >=10 | oordeel |
+|---|---|---|---|---|---|
+| fusion3_b2 | EfficientNet-B2-takken, batch 32, 6+3 epochs | 0.611 | 0.288 | 0.280 | -0.008 op >=10 (grens van de ruis), ~51 min/fold (1.5x) |
+| fusion3_b0_long | B0-takken, 10+4 epochs | 0.611 | 0.297 | 0.291 | geen winst (+0.003): langer trainen overfit alleen meer (train 0.159) |
+
+Conclusie: langer trainen schrappen. B2 is een kandidaat voor het tweede ensemble-model (andere backbone = diversiteit),
+niet voor de teachers. Job 14 (Version 12, lekvrije 5-fold met teacher-labels, B0, 6+3) loopt.
