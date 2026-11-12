@@ -37,4 +37,12 @@ Job 06 (Kaggle Version 4, ronde 1; tricks = label smoothing 0.02 vóór normalis
 | eegspec_mask_tricks | B0 eigen-spec + masking + tricks | 0.725 | 0.355 | 0.346 | tricks helpen t.o.v. eegspec_mask (0.755 / 0.367 / 0.357) |
 | eegimg_b0_tricks | B0 op raw EEG als beeld (0.5-20 Hz) + tricks | 0.734 | 0.361 | 0.351 | iets slechter dan eigen-spec bij B0 en 9 epochs; geen doorbraak, wel andere representatie voor ensemble |
 
-Ronde 2 (eegimg 0.5-40 Hz, eegimg zonder tricks) draaide niet: de runs stopten meteen na de start (logs leeg).
+Ronde 2 (Version 5; Version 4 liet die ronde door een startup-race in `progress()` over: de wachtlus zag de net gestarte runs nog niet):
+
+| run | model | KL all | KL >=6 | KL >=10 | opmerking |
+|---|---|---|---|---|---|
+| eegimg_b0_hi40_tricks | eegimg, filter 0.5-40 Hz, tricks | 0.748 | 0.367 | 0.356 | 20 Hz-grens is iets beter dan 40 Hz |
+| eegimg_b0_plain | eegimg, 0.5-20 Hz, zonder tricks | 0.736 | 0.361 | 0.351 | identiek aan mét tricks (0.361): de tricks doen niets voor eegimg |
+
+Conclusie job 06/07: tricks helpen de spectrogram-variant (-0.012 op >=6) maar niet eegimg; eegimg B0 (0.361) is niet beter dan eegspec B0 (0.355).
+Verschillen < ~0.005 zijn op één fold ruis. Sterkste hefboom blijft fusie van verschillende representaties (job 05: 0.329).
