@@ -1,5 +1,5 @@
 # Job 10 (background, ~45 min): eigen ideeen op fold 0. (a) leerbare Morlet-scalogram-front-end (eegcwt) los;
-# (b) beste 3-delige fusie met Dirichlet-prior label smoothing (globale klasseverdeling i.p.v. uniform).
+# (b) beste 3-delige fusie met Dirichlet-prior label smoothing; (c) hemisfeer-symmetrische takken; (d) annotator-conditionering.
 export PYTHONPATH=/kaggle/working/repo
 D=$(dirname "$(find /kaggle/input -maxdepth 4 -name train.csv | head -1)")
 C=/kaggle/temp/cache
@@ -16,6 +16,12 @@ SP='{kind: eegspec, backbone: efficientnet_b0, pretrained: true, mask: 2}'
 IM='{kind: eegimg, backbone: efficientnet_b0, pretrained: true}'
 run eegcwt_b0_tricks 0 model.kind=eegcwt model.mask=2 eeg_hi=40.0 $T
 run fusion3_prior_global 1 "model={kind: fusion, parts: [$SP, {kind: eeg1d}, $IM]}" eeg_hi=40.0 label_prior=global $T
+progress
+# round 2: hemisphere-symmetric (siamese) branches; annotator-count conditioning
+SPS='{kind: eegspec, backbone: efficientnet_b0, pretrained: true, mask: 2, siamese: true}'
+IMS='{kind: eegimg, backbone: efficientnet_b0, pretrained: true, siamese: true}'
+run fusion3_siamese 0 "model={kind: fusion, parts: [$SPS, {kind: eeg1d}, $IMS]}" eeg_hi=40.0 $T
+run fusion3_votecond 1 "model={kind: fusion, vote_cond: true, parts: [$SP, {kind: eeg1d}, $IM]}" eeg_hi=40.0 $T
 progress
 cut -c1-130 /kaggle/working/results.csv
 for f in /kaggle/working/logs/*.txt; do echo "== $f"; tail -n 4 $f | cut -c1-200; done

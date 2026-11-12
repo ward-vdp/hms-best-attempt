@@ -175,3 +175,23 @@ def test_calibrate_crossfit():
     o[TARGET_COLS] = y; o["n_votes"] = 12; o["fold"] = np.arange(400) % 5
     cal = crossfit(o, 10)
     assert kl_divergence(y, cal) < kl_divergence(y, p)
+
+
+def test_siamese_is_mirror_invariant_and_vote_cond(fake_root, cache):
+    from hmsbest.constants import MIRROR_CHANNELS
+    df = assign_folds(load_train_meta(fake_root / "train.csv"), 5, 42)
+    ds = HMSDataset(df, str(cache), "train")
+    b = torch.utils.data.default_collate([ds[0], ds[1]])
+    mb = dict(b); mb["eeg"] = b["eeg"][:, MIRROR_CHANNELS]
+    for kind in ("eegimg", "eegspec", "eegcwt"):
+        m = build_model(dict(kind=kind, backbone="efficientnet_b0", pretrained=False, siamese=True)).eval()
+        with torch.no_grad():
+            assert torch.allclose(m(b), m(mb), atol=1e-4), kind
+    c = dict(kind="fusion", vote_cond=True, parts=[dict(kind="eegimg", backbone="efficientnet_b0", pretrained=False, siamese=True),
+                                                   dict(kind="eeg1d")])
+    m = build_model(c).train()
+    m(b).sum().backward()
+    m.eval()
+    with torch.no_grad():
+        o1 = m(b); b2 = dict(b); b2["n"] = b["n"] * 0 + 1; o2 = m(b2)
+    assert torch.allclose(o1, o2)          # inference ignores the true vote count

@@ -50,30 +50,53 @@ class LearnableScalogram(nn.Module):
 
 
 class ImageNet(nn.Module):
-    """2D CNN on an image. source='spec' (Kaggle spectrogram), 'eegspec' (STFT computed from the EEG) or 'eegimg' (raw EEG)."""
+    """2D CNN on an image. source='spec' (Kaggle spectrogram), 'eegspec' (STFT computed from the EEG), 'eegimg' (raw EEG)
+    or 'eegcwt' (learnable Morlet scalogram).
 
-    def __init__(self, source="spec", backbone="efficientnet_b0", pretrained=True, drop=0.3, drop_path=0.1, mask=0):
+    siamese=True: hemisphere-symmetric variant. The image always consists of 4 equal bands along its height, ordered
+    LL, LP, RP, RL (left/right lateral and parasagittal chains). The left half [LL, LP] and the mirrored right half
+    [RL, RP] go through the SAME backbone; the features are combined as [fL + fR, |fL - fR|]. This is exactly invariant
+    to left-right mirroring and gives the head an explicit asymmetry feature: 4 of the 6 classes differ only in being
+    lateralised (LPD, LRDA) or generalised (GPD, GRDA)."""
+
+    def __init__(self, source="spec", backbone="efficientnet_b0", pretrained=True, drop=0.3, drop_path=0.1, mask=0,
+                 siamese=False):
         super().__init__()
-        self.source, self.mask = source, mask
+        self.source, self.mask, self.siamese = source, mask, siamese
         self.espec = EEGSpec() if source == "eegspec" else None
         self.scal = LearnableScalogram() if source == "eegcwt" else None
         self.net = timm.create_model(backbone, pretrained=pretrained, in_chans=1, num_classes=6,
                                      drop_rate=drop, drop_path_rate=drop_path)
+        self.feat_dim = self.net.num_features * (2 if siamese else 1)
+        self.head = nn.Sequential(nn.Dropout(drop), nn.Linear(self.feat_dim, 6)) if siamese else None
 
     def image(self, batch):
         if self.source == "eegimg":
             return eeg_image(batch["eeg"])
         if self.source == "eegcwt":
             x = self.scal(batch["eeg"])
-            if self.training and self.mask:
-                x = spec_mask(x, self.mask)
-            return x
+            return spec_mask(x, self.mask) if (self.training and self.mask) else x
         x = self.espec(batch["eeg"]) if self.source == "eegspec" else batch["spec"]
         if self.training and self.mask:
             x = spec_mask(x, self.mask)
         return _stack_regions(x)
 
+    def _f(self, x):
+        return self.net.forward_head(self.net.forward_features(x), pre_logits=True)
+
+    def feat(self, batch):
+        x = self.image(batch)
+        if not self.siamese:
+            return self._f(x)
+        h = x.shape[2] // 4
+        q = [x[:, :, i * h:(i + 1) * h] for i in range(4)]
+        left, right = torch.cat([q[0], q[1]], 2), torch.cat([q[3], q[2]], 2)
+        fl, fr = self._f(torch.cat([left, right], 0)).chunk(2)
+        return torch.cat([fl + fr, (fl - fr).abs()], 1)
+
     def forward(self, batch):
+        if self.siamese:
+            return self.head(self.feat(batch))
         return self.net(self.image(batch))
 
 
@@ -104,48 +127,57 @@ class EEG1D(nn.Module):
         chans = [(w, w, 2), (w, 2 * w, 2), (2 * w, 2 * w, 2), (2 * w, 4 * w, 2), (4 * w, 4 * w, 2)]
         self.blocks = nn.Sequential(*[ResBlock1d(a, b, s) for a, b, s in chans])
         self.gru = nn.GRU(4 * w, gru, batch_first=True, bidirectional=True)
+        self.feat_dim = 4 * gru
         self.head = nn.Sequential(nn.Dropout(drop), nn.Linear(4 * gru, 6))
 
-    def forward(self, batch):
+    def feat(self, batch):
         x = self.blocks(self.stem(batch["eeg"]))          # (B, C, T/64)
         x, _ = self.gru(x.transpose(1, 2))
-        return self.head(torch.cat([x.mean(1), x.amax(1)], dim=1))
-
-
-class Fusion(nn.Module):
-    """Late fusion of feature vectors from several sub-models (spec CNN + EEG CNN, ...)."""
-
-    def __init__(self, parts, drop=0.3):
-        super().__init__()
-        self.parts = nn.ModuleList(parts)
-        dims = []
-        for p in self.parts:
-            if isinstance(p, ImageNet):
-                dims.append(p.net.num_features)
-            else:
-                dims.append(p.head[1].in_features)
-        self.head = nn.Sequential(nn.Dropout(drop), nn.Linear(sum(dims), 6))
-
-    @staticmethod
-    def _feat(p, batch):
-        if isinstance(p, ImageNet):
-            return p.net.forward_head(p.net.forward_features(p.image(batch)), pre_logits=True)
-        x = p.blocks(p.stem(batch["eeg"]))
-        x, _ = p.gru(x.transpose(1, 2))
         return torch.cat([x.mean(1), x.amax(1)], dim=1)
 
     def forward(self, batch):
-        return self.head(torch.cat([self._feat(p, batch) for p in self.parts], dim=1))
+        return self.head(self.feat(batch))
+
+
+class Fusion(nn.Module):
+    """Late fusion of feature vectors from several sub-models (spec CNN + EEG CNN, ...).
+
+    vote_cond=True: annotator-count conditioning. The fused feature vector is modulated (FiLM) by the number of
+    annotators n of the training label. Low-n and high-n windows are different populations in this data set (few votes:
+    mostly clear-cut, near one-hot labels; many votes: harder, mixed labels), and the test set contains only many-vote
+    windows. Conditioning lets one network learn both label 'styles' from ALL data; at inference n is unknown, so it is
+    fixed to vote_ref, i.e. we ask for the many-annotator answer."""
+
+    def __init__(self, parts, drop=0.3, vote_cond=False, vote_ref=15.0):
+        super().__init__()
+        self.parts = nn.ModuleList(parts)
+        d = sum(p.feat_dim for p in self.parts)
+        self.head = nn.Sequential(nn.Dropout(drop), nn.Linear(d, 6))
+        self.vote_ref = vote_ref
+        self.cond = None
+        if vote_cond:
+            self.cond = nn.Sequential(nn.Linear(1, 32), nn.SiLU(), nn.Linear(32, 2 * d))
+            nn.init.zeros_(self.cond[2].weight); nn.init.zeros_(self.cond[2].bias)
+
+    def forward(self, batch):
+        f = torch.cat([p.feat(batch) for p in self.parts], dim=1)
+        if self.cond is not None:
+            n = batch["n"].float() if self.training else torch.full((f.shape[0],), self.vote_ref, device=f.device)
+            s = (torch.log(n.clamp(1.0, 30.0)) / math.log(30.0)).unsqueeze(1)
+            g, b = self.cond(s).float().chunk(2, dim=1)
+            f = f * (1 + torch.tanh(g)) + b
+        return self.head(f)
 
 
 def build_model(cfg: dict) -> nn.Module:
     kind = cfg["kind"]
     if kind in ("spec", "eegspec", "eegimg", "eegcwt"):
         return ImageNet(kind, cfg.get("backbone", "efficientnet_b0"), cfg.get("pretrained", True),
-                        cfg.get("drop", 0.3), cfg.get("drop_path", 0.1), cfg.get("mask", 0))
+                        cfg.get("drop", 0.3), cfg.get("drop_path", 0.1), cfg.get("mask", 0),
+                        cfg.get("siamese", False))
     if kind == "eeg1d":
         return EEG1D(cfg.get("width", 48), cfg.get("drop", 0.3))
     if kind == "fusion":
         parts = [build_model(p) for p in cfg["parts"]]
-        return Fusion(parts, cfg.get("drop", 0.3))
+        return Fusion(parts, cfg.get("drop", 0.3), cfg.get("vote_cond", False), cfg.get("vote_ref", 15.0))
     raise ValueError(kind)
