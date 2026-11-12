@@ -31,6 +31,8 @@ def eeg_window(arr: np.ndarray, offset_s: float, lo=0.5, hi=40.0, clip=500.0, sc
     """
     s = int(round(offset_s * FS))
     w = np.asarray(arr[:, s:s + EEG_LEN], dtype=np.float32)
+    # float16 caches can hold +-inf where the raw signal overflowed; filtering would turn that into NaN
+    w = np.clip(np.nan_to_num(w, nan=0.0, posinf=2000.0, neginf=-2000.0), -2000.0, 2000.0)
     if w.shape[1] < EEG_LEN:
         w = np.pad(w, ((0, 0), (0, EEG_LEN - w.shape[1])))
     if lo is not None:

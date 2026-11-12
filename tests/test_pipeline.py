@@ -90,3 +90,11 @@ def test_train_and_infer_end_to_end(fake_root, cache, tmp_path):
                     str(tmp_path / "runs" / "t") + ":1.0", "--out", str(out)], check=True)
     sub = pd.read_csv(out)
     assert len(sub) == 5 and np.allclose(sub.iloc[:, 1:].sum(axis=1), 1)
+
+
+def test_eeg_window_survives_inf():
+    x = np.random.default_rng(0).normal(0, 20, (16, 12000)).astype(np.float16)
+    x[3, 5000] = np.inf
+    x[5, 6000] = -np.inf
+    w = eeg_window(x, 0.0)
+    assert np.isfinite(w).all()

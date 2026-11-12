@@ -16,7 +16,7 @@ from .signal import eeg_bipolar, spec_log
 def _eeg(job):
     src, dst = job
     if not os.path.exists(dst):
-        np.save(dst, eeg_bipolar(pd.read_parquet(src)).astype(np.float16))
+        np.save(dst, np.clip(eeg_bipolar(pd.read_parquet(src)), -2000, 2000).astype(np.float16))
     return dst
 
 
