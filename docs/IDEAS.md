@@ -65,3 +65,32 @@ Eigen ideeën (niet letterlijk uit een top-oplossing), in volgorde van verwachte
    stemmen en de OOF-voorspelling van een eerder model (Bayesiaans: de voorspelling als prior). Team Sony wilde pseudo-labeling
    doen maar had geen tijd.
 6. Grotere/andere backbones per tak (EfficientNetV2-B3 zoals VIPEEGNet) en langer schema, pas na de 5-fold-baseline.
+
+## Eigen ideeën, ronde 2 (12-11, gebouwd en getest in `tests/`, Kaggle-resultaten in RESULTS.md)
+
+7. **Hemisfeer-symmetrisch netwerk** (`siamese: true` op een beeldtak). Vier van de zes klassen verschillen alleen in
+   *gelateraliseerd* (LPD, LRDA) versus *gegeneraliseerd* (GPD, GRDA). Elk beeld bestaat uit 4 banden LL, LP, RP, RL; de
+   linkerhelft [LL, LP] en de gespiegelde rechterhelft [RL, RP] gaan door dezelfde backbone, en de kop krijgt
+   [fL + fR, |fL - fR|]. Gevolg: exact spiegelinvariant (test `test_siamese_is_mirror_invariant…`), een expliciet
+   asymmetriekenmerk, en elke hemisfeer is een extra trainingsvoorbeeld voor dezelfde gewichten. De top-oplossingen
+   gebruikten spiegelen alleen als augmentatie/TTA; hier zit het in de architectuur.
+8. **Annotator-conditionering** (`vote_cond: true` op de fusie). Rijen met 3 stemmen (helft van de data) en rijen met
+   10-20 stemmen zijn verschillende populaties: weinig stemmen = duidelijke, bijna one-hot gevallen; veel stemmen =
+   moeilijke, gemengde gevallen, en de test bevat alleen de tweede soort. Iedereen lost dat op met een 2e trainingsstap op
+   veel-stem-rijen (en gooit zo de helft van de data weg in de laatste epochs). Hier moduleert log(n) de gefuseerde
+   features (FiLM, nul-geïnitialiseerd); bij inferentie wordt n vastgezet op 15: "geef het antwoord dat een groot panel
+   zou geven". Het echte n wordt bij validatie niet gebruikt (test `…vote_cond`), dus geen lek.
+9. **Teacher-verfijnde labels** (`hmsbest/teacher.py`, idee 5 uitgewerkt). Stemmen ~ Multinomiaal(n, q), teacher-
+   voorspelling p als Dirichlet-prior: y' = (n·y + τ·p)/(n + τ). τ = "aantal pseudo-annotators dat de teacher waard is",
+   niet met de hand gekozen maar de maximum-likelihood-concentratie van het Dirichlet-multinomiaal op stemmen die de
+   teacher niet zag (`estimate_tau`). Rijen met 3 stemmen schuiven sterk, rijen met 15 nauwelijks. Daardoor kan stap 2 op
+   ALLE vensters trainen i.p.v. alleen >= 6 stemmen.
+   Lekregels: (1) teacher-voorspelling altijd out-of-fold (anders echoot ze het ruislabel); (2) voor een eerlijke
+   validatie van student f mag de teacher fold f ook niet gezien hebben -> `exclude_folds`, teacher T(f,g) traint zonder
+   f en g en voorspelt g. Job 11 test dit lekvrij op fold 0 (4 teachers op 60 % van de data).
+   Voor een volledige 5-fold: 10 paar-teachers T{f,g} (elk bruikbaar voor student f én g).
+
+Nog niet gebouwd, genoteerd:
+- 10-minuten-context: de Kaggle-spectrogramtak ziet 10 min, de EEG-takken 50 s. Als vierde tak in de fusie (lage resolutie)
+  geeft dat informatie over de evolutie (aanval vs. stationair patroon) die geen EEG-tak heeft.
+- Consistentie tussen overlappende vensters van dezelfde eeg_id (zelfde stemmen, 2 s verschoven) als regularisatie.

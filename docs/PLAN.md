@@ -51,3 +51,16 @@ Gefaalde experimenten worden ook gelogd.
 - Stap 1: 15 epochs, loss-gewicht voters/20; stap 2: 5 epochs, lr 1e-4, alleen >= 6 annotators; 10-fold CV, validatie op >= 6.
 - Ensemble van 6 modellen (spectrogram, ruwe EEG, gemengd) gaf slechts een kleine winst (~0.28 -> 0.27 private).
 Eigen vaststellingen: de testset heeft 3-20 annotators (competitiepagina), dus naast >= 6 wordt ook "alle" gerapporteerd.
+
+## Plan eindmodel (12-11, voorlopig; wordt bijgesteld na job 10/11 en de 5-fold-analyse)
+Budget: Kaggle 30 GPU-uur/week (reset in het weekend), na vanavond ~9 u verbruikt -> ~20 u.
+- **A. Ingrediënten kiezen op fold 0** (jobs 10-11, ~3,5 u, loopt): leerbaar scalogram, globale prior, siamese takken,
+  annotator-conditionering, teacher-labels. Regel: alleen overnemen bij winst > 0.005 op >= 10 (kleiner = ruis op één fold).
+- **B. Capaciteit** (1 job, ~2 u): beste fusie met EfficientNetV2-B3-takken (zoals VIPEEGNet) en 10+4 epochs tegenover B0 6+3.
+  De trainfout (0.19) ligt ver onder de validatie (0.30): meer capaciteit helpt alleen samen met de regularisatie uit A.
+- **C. 5-fold van 2 complementaire modellen** (~10 u): (1) beste EEG-fusie; (2) variant met andere takken (scalogram +
+  Kaggle-spectrogram met 10 min context + 1D) en andere seed. OOF per model bewaren.
+- **D. Zonder GPU**: OOF-blend (`hmsbest.ensemble`), daarna gecross-fitte kalibratie (`hmsbest.calibrate`); eindcijfer =
+  5-fold OOF KL op alle / >= 6 / >= 10.
+- Reserve ~4 u voor herstarts. Niets indienen; leaderboard-vergelijking blijft indirect (winnaars: CV 0.22-0.245 per model
+  op per-eeg_id gemiddelde labels >= 10; private 0.27).
