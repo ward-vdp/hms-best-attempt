@@ -1,0 +1,9 @@
+numpy
+pandas
+pyarrow
+scipy
+scikit-learn
+pyyaml
+torch
+timm
+pytest

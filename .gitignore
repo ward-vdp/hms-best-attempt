@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.npy
+*.pt
+*.parquet
+data/
+cache/
+runs/
+submission.csv
+kaggle.json
+.env
+.w

@@ -1,0 +1,17 @@
+name: spec_b0
+seed: 42
+folds: 5
+data_root: /kaggle/input/hms-harmful-brain-activity-classification
+cache_dir: /kaggle/working/cache
+out_dir: /kaggle/working/runs
+results_csv: /kaggle/working/results.csv
+batch_size: 64
+num_workers: 4
+spec_rows: 300
+ema: 0.998
+model: {kind: spec, backbone: efficientnet_b0, pretrained: true, drop: 0.3, drop_path: 0.1}
+aug: {mirror: true, polarity: true}
+# stage 1: all windows, loss weighted by annotator count; stage 2: only windows with >= 6 annotators
+stages:
+  - {epochs: 10, lr: 1.0e-3, min_votes: 0, weight: votes}
+  - {epochs: 4, lr: 1.0e-4, min_votes: 6, weight: none}
