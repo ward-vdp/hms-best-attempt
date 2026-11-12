@@ -56,3 +56,34 @@ Job 08 (Kaggle Version 6, late fusie van verschillende representaties, fold 0; t
 
 Conclusie: de ene representatie voegt weinig toe (eegimg B0 alleen 0.361), maar gefuseerd met de spectrogramtak geeft het -0.03 op >=6 en -0.04 à -0.07 op "all".
 Diversiteit tussen representaties is de hefboom; de trainfout (0.19) is nog steeds veel lager dan de validatie (0.31).
+
+## Job 09 (Kaggle Version 7): 5-fold CV van de 3-delige fusie (eigen-spec B0 + EEG-CNN + eegimg B0, tricks, 6+3 epochs)
+
+**5-fold OOF KL: 0.565 (alle 17 089 eeg_id's) / 0.278 (>= 6) / 0.275 (>= 10, 5 939 eeg_id's).**
+Per fold op >= 10: 0.293, 0.252, 0.290, 0.270, 0.266 (spreiding ±0.017 -> verschillen < ~0.008 op één fold zijn ruis).
+
+Foutanalyse (uit `oof_f3p.csv`; zelfde berekening als `hmsbest/analyze.py`):
+
+| aantal stemmen | 1-2 | 3 | 4-5 | 6-9 | 10-12 | 13-15 | >= 16 |
+|---|---|---|---|---|---|---|---|
+| eeg_id's | 4 780 | 4 949 | 1 307 | 114 | 1 111 | 3 177 | 1 651 |
+| KL | 0.467 | **1.010** | 0.562 | 0.416 | 0.310 | 0.271 | 0.260 |
+
+1. **Twee annotator-populaties met verschillende labels, niet alleen meer ruis.** Gemiddeld label bij 3 stemmen: 29 % seizure,
+   21 % GRDA, 27 % other; bij >= 10 stemmen: 5 % seizure, 9 % GRDA, 48 % other. Het model (na stap 2) voorspelt op de
+   3-stem-rijen 11 % seizure en 50 % other. 74-91 % van de laag-stem-labels is unaniem, tegen 14 % bij >= 10.
+   -> "KL alle" meet vooral die mismatch en zegt weinig over de test (>= 10 annotators); stuurcijfer = KL >= 10.
+   -> Ondersteunt annotator-conditionering (idee 8) en teacher-labels (idee 9); verklaart waarom stap 2 zoveel oplevert.
+2. **Kalibratie is al goed.** Beste temperatuur op >= 10 is T = 1.00-1.05 (KL 0.275 -> 0.275); per betrouwbaarheidsklasse klopt
+   de voorspelde kans met de werkelijke stemfractie (0.50 vs 0.48, 0.70 vs 0.68, 0.88 vs 0.86, 0.97 vs 0.98).
+   -> Temperatuur/entmax-achtige nabewerking levert hier niets op; winst moet uit beter onderscheid komen.
+3. **Waar zit de fout (>= 10)?** Aandeel in de KL: LPD 24 %, LRDA 19 %, other 18 %, GPD 17 %, GRDA 14 %, seizure 8 %.
+   KL als de klasse dominant is: LRDA 0.445 (305), LPD 0.340, seizure 0.322, GRDA 0.305, GPD 0.286, other 0.223.
+   Verwarringen (gemiddelde voorspelde massa vs stemmen): LRDA -> other 0.36 (stemmen 0.25) en -> LPD 0.17 (0.11);
+   GRDA -> other 0.39 (0.28). Links/rechts versus gegeneraliseerd wordt nauwelijks verward (LRDA -> GPD 0.01, LPD -> GPD 0.06).
+   -> Het knelpunt is *ritmische delta versus achtergrond* en *ritmisch versus periodiek*, niet lateralisatie. Onze STFT
+      (venster 0.64 s) heeft ~1.6 Hz resolutie en kan 1 Hz van 2.5 Hz niet scheiden: een tak met fijne delta-resolutie
+      (scalogram `eegcwt`, of STFT met 2-4 s venster) is de meest gerichte verbetering. De siamese tak (idee 7) lost een
+      probleem op dat klein blijkt.
+4. **Moeilijkheid volgt de onenigheid tussen experts**: unanieme doelen KL 0.153, sterke onenigheid 0.34. 10 % van de
+   voorspelde massa staat op klassen zonder enkele stem. Top-10 % rijen = 33 % van de KL (geen extreme uitschieters).
