@@ -1,7 +1,8 @@
 # Job executed by the Kaggle runner notebook. Edited and pushed from the repo; the notebook only does `git pull; bash jobs/current.sh`.
 set -e
 export PYTHONPATH=/kaggle/working/repo
-D=/kaggle/input/hms-harmful-brain-activity-classification
+D=$(dirname "$(find /kaggle/input -maxdepth 4 -name train.csv | head -1)")
+echo "DATA_ROOT=$D"
 nvidia-smi -L
 python -c "import torch,timm;print('torch',torch.__version__,'timm',timm.__version__,'gpus',torch.cuda.device_count())"
 ls $D | head
