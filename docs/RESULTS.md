@@ -87,3 +87,12 @@ Foutanalyse (uit `oof_f3p.csv`; zelfde berekening als `hmsbest/analyze.py`):
       probleem op dat klein blijkt.
 4. **Moeilijkheid volgt de onenigheid tussen experts**: unanieme doelen KL 0.153, sterke onenigheid 0.34. 10 % van de
    voorspelde massa staat op klassen zonder enkele stem. Top-10 % rijen = 33 % van de KL (geen extreme uitschieters).
+
+## Job 10 (Kaggle Version 8): eigen ideeën op fold 0 (referentie: 3-delige fusie 0.602 / 0.299 / 0.293)
+
+| run | wat | KL all | KL >=6 | KL >=10 | oordeel |
+|---|---|---|---|---|---|
+| eegcwt_b0_tricks | leerbaar Morlet-scalogram B0, losse tak | 0.663 | 0.348 | 0.340 | **beste losse tak** (eegspec 0.725/0.355/0.346, eegimg 0.734/0.361/0.351) -> in de fusie opnemen |
+| fusion3_prior_global | fusie + smoothing naar globale stemverdeling | 0.602 | 0.293 | 0.288 | -0.006 op >=10: klein, gratis -> houden |
+| fusion3_votecond | fusie + annotator-conditionering | 0.661 | 0.296 | 0.288 | -0.005 op >=10, "all" slechter (voorspelt altijd in veel-stem-stijl); binnen ruis |
+| fusion3_siamese | fusie met hemisfeer-symmetrische takken | 0.673 | 0.347 | 0.338 | **mislukt** (+0.045): past bij de foutanalyse (lateralisatie is niet het knelpunt) en de halve beelden verliezen context -> schrappen |
