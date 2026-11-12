@@ -11,7 +11,8 @@ from .signal import eeg_window, spec_window
 class HMSDataset(Dataset):
     def __init__(self, rows: pd.DataFrame, cache_dir: str, mode: str = "train",
                  min_votes: int = 0, spec_rows: int = 300, filt: bool = True, eeg_hi: float = 40.0,
-                 target_mean_w: float = 0.0, label_smooth: float = 0.0, shift_s: float = 0.0):
+                 target_mean_w: float = 0.0, label_smooth: float = 0.0, shift_s: float = 0.0,
+                 label_prior: str = "uniform"):
         assert mode in ("train", "eval")
         self.cache, self.mode, self.spec_rows, self.filt = cache_dir, mode, spec_rows, filt
         self.eeg_hi = eeg_hi
@@ -19,6 +20,14 @@ class HMSDataset(Dataset):
         # train only: +label_smooth to every vote BEFORE normalising (low-vote labels get smoothed more; Team Sony)
         self.ls = label_smooth if mode == "train" else 0.0
         self.shift = shift_s if mode == "train" else 0.0   # train only: random +-shift_s time shift of the EEG window
+        # Dirichlet-posterior view of the smoothing: pseudo-votes ls*K spread over a prior (uniform, or the global class
+        # frequency of the training votes -> low-vote labels shrink towards what annotators say on average)
+        k = len(TARGET_COLS)
+        if label_prior == "global":
+            v = rows[TARGET_COLS].to_numpy(np.float64) * rows.n_votes.to_numpy(np.float64)[:, None]
+            self.prior = (v.sum(0) / v.sum()).astype(np.float32)
+        else:
+            self.prior = np.full(k, 1.0 / k, np.float32)
         r = rows[rows.n_votes >= min_votes] if mode == "train" else rows
         self.groups = []
         for eeg_id, g in r.groupby("eeg_id", sort=True):
@@ -47,7 +56,8 @@ class HMSDataset(Dataset):
             off = float(np.clip(off + (float(torch.rand(1)) * 2 - 1) * self.shift, 0.0, max(0.0, eeg.shape[1] / FS - EEG_LEN / FS)))
         y, n = (1 - self.tw) * g["y"][k] + self.tw * g["y_mean"], (1 - self.tw) * g["n"][k] + self.tw * g["n_mean"]
         if self.ls > 0:
-            y = (y * n + self.ls) / (n + len(TARGET_COLS) * self.ls)
+            nc = len(TARGET_COLS)
+            y = (y * n + self.ls * nc * self.prior) / (n + nc * self.ls)
         return dict(
             eeg=torch.from_numpy(eeg_window(eeg, off, lo=0.5 if self.filt else None, hi=self.eeg_hi)),
             spec=torch.from_numpy(spec_window(spec, g["spec_off"][k], self.spec_rows)),

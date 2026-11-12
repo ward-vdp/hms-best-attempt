@@ -143,3 +143,35 @@ def test_label_smoothing_and_shift(fake_root, cache):
     assert ys[0] < 1 and ys[1] > 0
     ev = HMSDataset(df, str(cache), "eval", label_smooth=0.02, shift_s=5.0)
     assert ev.ls == 0.0 and ev.shift == 0.0
+
+
+def test_eegcwt_and_prior(fake_root, cache):
+    from hmsbest.models import LearnableScalogram
+    df = assign_folds(load_train_meta(fake_root / "train.csv"), 5, 42)
+    ds = HMSDataset(df, str(cache), "train", label_smooth=0.02, label_prior="global")
+    assert abs(float(ds.prior.sum()) - 1) < 1e-5 and abs(float(ds[0]["y"].sum()) - 1) < 1e-5
+    s = LearnableScalogram()
+    x = s(torch.randn(2, 16, 10000))
+    assert x.shape == (2, 1, 16 * 24, 625) and torch.isfinite(x).all()
+    b = torch.utils.data.default_collate([ds[0], ds[1]])
+    for c in (dict(kind="eegcwt", backbone="efficientnet_b0", pretrained=False, mask=2),
+              dict(kind="fusion", parts=[dict(kind="eegcwt", backbone="efficientnet_b0", pretrained=False),
+                                         dict(kind="eegspec", backbone="efficientnet_b0", pretrained=False)])):
+        m = build_model(c).train()
+        out = m(b)
+        assert out.shape == (2, 6)
+        out.sum().backward()
+
+
+def test_calibrate_crossfit():
+    import pandas as pd
+    from hmsbest.calibrate import crossfit
+    from hmsbest.constants import CLASSES, TARGET_COLS
+    from hmsbest.metrics import kl_divergence
+    rng = np.random.default_rng(0)
+    y = rng.dirichlet(np.ones(6) * 0.3, 400)
+    p = (y + 0.3) / (y + 0.3).sum(1, keepdims=True)          # under-confident predictions
+    o = pd.DataFrame(p, columns=[f"pred_{c}" for c in CLASSES])
+    o[TARGET_COLS] = y; o["n_votes"] = 12; o["fold"] = np.arange(400) % 5
+    cal = crossfit(o, 10)
+    assert kl_divergence(y, cal) < kl_divergence(y, p)

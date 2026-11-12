@@ -1,7 +1,10 @@
 """Models. Every model takes the batch dict (keys 'eeg', 'spec') and returns 6 logits."""
 import timm
 import torch
+import math
+
 import torch.nn as nn
+import torch.nn.functional as F
 
 from .specs import EEGSpec, spec_mask
 
@@ -18,6 +21,34 @@ def eeg_image(eeg):
     return (x - x.mean(dim=(1, 2, 3), keepdim=True)) / (x.std(dim=(1, 2, 3), keepdim=True) + 1e-4)
 
 
+class LearnableScalogram(nn.Module):
+    """Differentiable wavelet front-end: a bank of complex Morlet filters (shared over the 16 bipolar channels) whose
+    weights are initialised as a CWT and then trained end-to-end. Output: log-power scalogram per channel, channels
+    stacked along the frequency axis -> (B, 1, 16 * n_freq, T / stride).
+    Motivation: CWT/superlet images were the strongest inputs of the 1st place (Team Sony) and a learnable EEG-to-image
+    conv front-end drove VIPEEGNet (arXiv 2507.08874); this combines both (fixed-wavelet init, free to adapt)."""
+
+    def __init__(self, n_freq=24, f_lo=0.75, f_hi=40.0, ksize=401, stride=16, fs=200.0, learnable=True):
+        super().__init__()
+        f = torch.logspace(math.log10(f_lo), math.log10(f_hi), n_freq)
+        cyc = (f * 1.5).clamp(2.0, 7.0)                           # fewer cycles at low f so the kernel fits in 2 s
+        t = (torch.arange(ksize) - ksize // 2) / fs
+        sig = cyc / (2 * math.pi * f)
+        env = torch.exp(-0.5 * (t[None] / sig[:, None]) ** 2)
+        env = env / env.sum(1, keepdim=True)
+        w = torch.cat([env * torch.cos(2 * math.pi * f[:, None] * t[None]),
+                       env * torch.sin(2 * math.pi * f[:, None] * t[None])], 0)  # (2F, K)
+        self.weight = nn.Parameter(w[:, None, :].clone(), requires_grad=learnable)
+        self.n_freq, self.stride, self.pad = n_freq, stride, ksize // 2
+
+    def forward(self, eeg):
+        b, c, t = eeg.shape
+        z = F.conv1d(eeg.reshape(b * c, 1, t).float(), self.weight.float(), stride=self.stride, padding=self.pad)
+        pw = z[:, :self.n_freq] ** 2 + z[:, self.n_freq:] ** 2
+        x = torch.log(pw + 1e-6).reshape(b, 1, c * self.n_freq, -1)
+        return (x - x.mean(dim=(2, 3), keepdim=True)) / (x.std(dim=(2, 3), keepdim=True) + 1e-4)
+
+
 class ImageNet(nn.Module):
     """2D CNN on an image. source='spec' (Kaggle spectrogram), 'eegspec' (STFT computed from the EEG) or 'eegimg' (raw EEG)."""
 
@@ -25,12 +56,18 @@ class ImageNet(nn.Module):
         super().__init__()
         self.source, self.mask = source, mask
         self.espec = EEGSpec() if source == "eegspec" else None
+        self.scal = LearnableScalogram() if source == "eegcwt" else None
         self.net = timm.create_model(backbone, pretrained=pretrained, in_chans=1, num_classes=6,
                                      drop_rate=drop, drop_path_rate=drop_path)
 
     def image(self, batch):
         if self.source == "eegimg":
             return eeg_image(batch["eeg"])
+        if self.source == "eegcwt":
+            x = self.scal(batch["eeg"])
+            if self.training and self.mask:
+                x = spec_mask(x, self.mask)
+            return x
         x = self.espec(batch["eeg"]) if self.source == "eegspec" else batch["spec"]
         if self.training and self.mask:
             x = spec_mask(x, self.mask)
@@ -103,7 +140,7 @@ class Fusion(nn.Module):
 
 def build_model(cfg: dict) -> nn.Module:
     kind = cfg["kind"]
-    if kind in ("spec", "eegspec", "eegimg"):
+    if kind in ("spec", "eegspec", "eegimg", "eegcwt"):
         return ImageNet(kind, cfg.get("backbone", "efficientnet_b0"), cfg.get("pretrained", True),
                         cfg.get("drop", 0.3), cfg.get("drop_path", 0.1), cfg.get("mask", 0))
     if kind == "eeg1d":

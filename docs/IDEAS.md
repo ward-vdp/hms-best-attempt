@@ -36,3 +36,32 @@ Gebaseerd op wat we al hebben (EEGSpec/ImageNet/EEG1D, 2-stage, EMA, mirror, mix
 - Winnaars: CV ≈ 0.22–0.245 per model (≥10 votes), ensemble ≈ 0.22–0.23 en private LB ≈ 0.27.
 - Cranjis-repo: OOF 0.414 ↔ public LB 0.34; baseline OOF 0.729 ↔ LB 0.45.
 - Onze huidige fold-0 cijfers staan in `docs/RESULTS.md`.
+
+## Na de competitie (2024-2026) en eigen ideeën
+
+Nieuwe bron:
+- [S6] VIPEEGNet, arXiv 2507.08874 (2025): één EfficientNetV2-B3 met een **leerbare EEG-naar-beeld conv-module** (drie groepen
+  kernels) op 16-kanaal double banana, 0.5-45 Hz; 5-fold CV KL 0.225, Kaggle private 0.2725 (≈ 2e plaats) met ~49M parameters,
+  2.8% van het winnende ensemble. Ablatie: de leerbare front-end en ImageNet-pretraining zijn de belangrijkste onderdelen.
+  Extra augmentaties: kanaal-permutatie, inversie, tijdomkering, kanaal-swap.
+- [S7] EEG-foundation-modellen (LaBraM, CBraMod, EEGPT, BIOT; benchmark EEG-FM-Bench, arXiv 2508.17742): voorgetraind op TUH;
+  HMS zit niet in de benchmark en er is geen bewijs dat ze hier een gesuperviseerd CNN verslaan. Kandidaat als extra
+  fusietak, niet als eerste keuze (zwaar, andere kanaalindeling).
+
+Eigen ideeën (niet letterlijk uit een top-oplossing), in volgorde van verwachte winst per GPU-uur:
+1. **Fusie van verschillende representaties in één netwerk** (al getest, job 08): eigen-spec + raw-EEG-beeld + 1D-CNN met één
+   gedeelde kop i.p.v. losse modellen achteraf middelen. Fold 0: 0.329 -> 0.299 op >=6. De winnaars middelden losse modellen.
+2. **Leerbaar Morlet-scalogram** (`kind: eegcwt`, `LearnableScalogram`): de CWT van de winnaars als conv-laag, geïnitialiseerd
+   als complexe Morlet-wavelets (24 frequenties 0.75-40 Hz, log-spaced) en end-to-end mee getraind. Combineert de sterkste
+   vaste representatie (CWT, 1e plaats) met de leerbare front-end (VIPEEGNet). Job 10.
+3. **Dirichlet-prior label smoothing** (`label_prior: global`): de +0.02 per stem van Team Sony is een Dirichlet-posterior met
+   uniforme prior; met de globale stemverdeling als prior krimpen labels met weinig stemmen naar wat annotatoren gemiddeld
+   zeggen i.p.v. naar uniform. Job 10.
+4. **Gecross-fitte kalibratie** (`hmsbest/calibrate.py`): temperatuur + bias per klasse, gefit op de andere folds en
+   toegepast op de uitgehouden fold. Motivatie: getraind op sterk gesmoothte labels met weinig stemmen, geëvalueerd op
+   scherpe labels met >=10 stemmen; KL straft verkeerde zekerheid zwaar. Dezelfde reden waarom entmax (1e plaats) hielp,
+   maar eerlijk gemeten en goedkoper.
+5. **Teacher-verfijnde labels** (nog niet gebouwd): voor vensters met < 10 stemmen het doel vervangen door een mix van
+   stemmen en de OOF-voorspelling van een eerder model (Bayesiaans: de voorspelling als prior). Team Sony wilde pseudo-labeling
+   doen maar had geen tijd.
+6. Grotere/andere backbones per tak (EfficientNetV2-B3 zoals VIPEEGNet) en langer schema, pas na de 5-fold-baseline.

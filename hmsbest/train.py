@@ -110,7 +110,8 @@ def run_fold(cfg, df, fold, dev, out_dir):
     for si, st in enumerate(cfg["stages"]):
         ds = HMSDataset(tr, mode="train", min_votes=st.get("min_votes", 0),
                         target_mean_w=cfg.get("target_mean_w", 0.0),
-                        label_smooth=cfg.get("label_smooth", 0.0), shift_s=cfg.get("shift_s", 0.0), **dkw)
+                        label_smooth=cfg.get("label_smooth", 0.0), shift_s=cfg.get("shift_s", 0.0),
+                        label_prior=cfg.get("label_prior", "uniform"), **dkw)
         loader = DataLoader(ds, batch_size=cfg["batch_size"], shuffle=True, num_workers=nw,
                             drop_last=True, pin_memory=dev.type == "cuda", persistent_workers=nw > 0)
         steps = st["epochs"] * len(loader)
