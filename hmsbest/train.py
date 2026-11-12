@@ -58,6 +58,17 @@ def augment(batch, cfg):
     return batch
 
 
+def mixup(batch, alpha, p):
+    """Mix inputs and soft targets of random pairs (one lambda per batch), with probability p."""
+    if alpha <= 0 or np.random.rand() > p:
+        return batch
+    lam = float(np.random.beta(alpha, alpha))
+    idx = torch.randperm(batch["y"].shape[0], device=batch["y"].device)
+    for k in ("eeg", "spec", "y", "n"):
+        batch[k] = lam * batch[k] + (1 - lam) * batch[k][idx]
+    return batch
+
+
 def to_dev(batch, dev):
     return {k: (v.to(dev, non_blocking=True) if torch.is_tensor(v) else v) for k, v in batch.items()}
 
@@ -112,6 +123,7 @@ def run_fold(cfg, df, fold, dev, out_dir):
             run_loss = 0.0
             for batch in loader:
                 batch = augment(to_dev(batch, dev), cfg.get("aug", {}))
+                batch = mixup(batch, cfg.get("aug", {}).get("mixup", 0.0), cfg.get("aug", {}).get("mixup_p", 0.5))
                 with torch.autocast(dev.type, enabled=dev.type == "cuda"):
                     logits = model(batch)
                 loss = kl_loss(logits, batch["y"], batch["n"], st.get("weight", "none"))
@@ -155,10 +167,11 @@ def main():
     oof = pd.concat(oofs, ignore_index=True)
     oof.to_csv(os.path.join(out_dir, "oof.csv"), index=False)
     pc = [f"pred_{c}" for c in CLASSES]
-    hv = oof.n_votes >= 6
+    hv, hv10 = oof.n_votes >= 6, oof.n_votes >= 10
     res = dict(ts=time.strftime("%Y-%m-%d %H:%M"), exp=cfg["name"], folds=len(oofs),
                kl_all=kl_divergence(oof[TARGET_COLS], oof[pc]),
                kl_hv=kl_divergence(oof.loc[hv, TARGET_COLS], oof.loc[hv, pc]) if hv.any() else np.nan,
+               kl_hv10=kl_divergence(oof.loc[hv10, TARGET_COLS], oof.loc[hv10, pc]) if hv10.any() else np.nan,
                cfg=json.dumps(cfg, sort_keys=True))
     path = cfg.get("results_csv", "outputs/results.csv")
     pd.DataFrame([res]).to_csv(path, mode="a", header=not os.path.exists(path), index=False)

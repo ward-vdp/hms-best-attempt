@@ -98,3 +98,17 @@ def test_eeg_window_survives_inf():
     x[5, 6000] = -np.inf
     w = eeg_window(x, 0.0)
     assert np.isfinite(w).all()
+
+
+def test_mask_and_mixup():
+    from hmsbest.specs import spec_mask
+    from hmsbest.train import mixup
+    x = torch.ones(3, 4, 100, 50)
+    m = spec_mask(x)
+    assert m.shape == x.shape and (m == 0).any() and (m == 1).any()
+    b = dict(eeg=torch.randn(4, 16, 100), spec=torch.randn(4, 4, 10, 10), y=torch.eye(6)[:4], n=torch.ones(4) * 5)
+    torch.manual_seed(0); np.random.seed(0)
+    out = mixup(dict(b), 0.4, 1.0)
+    assert torch.allclose(out["y"].sum(1), torch.ones(4), atol=1e-5)
+    m = build_model(dict(kind="spec", backbone="efficientnet_b0", pretrained=False, mask=2)).train()
+    assert m(dict(spec=torch.randn(2, 4, 100, 300))).shape == (2, 6)

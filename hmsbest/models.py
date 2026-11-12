@@ -3,7 +3,7 @@ import timm
 import torch
 import torch.nn as nn
 
-from .specs import EEGSpec
+from .specs import EEGSpec, spec_mask
 
 
 def _stack_regions(x):
@@ -14,15 +14,17 @@ def _stack_regions(x):
 class ImageNet(nn.Module):
     """2D CNN on a spectrogram image. source='spec' (Kaggle) or 'eegspec' (computed from the EEG)."""
 
-    def __init__(self, source="spec", backbone="efficientnet_b0", pretrained=True, drop=0.3, drop_path=0.1):
+    def __init__(self, source="spec", backbone="efficientnet_b0", pretrained=True, drop=0.3, drop_path=0.1, mask=0):
         super().__init__()
-        self.source = source
+        self.source, self.mask = source, mask
         self.espec = EEGSpec() if source == "eegspec" else None
         self.net = timm.create_model(backbone, pretrained=pretrained, in_chans=1, num_classes=6,
                                      drop_rate=drop, drop_path_rate=drop_path)
 
     def forward(self, batch):
         x = self.espec(batch["eeg"]) if self.source == "eegspec" else batch["spec"]
+        if self.training and self.mask:
+            x = spec_mask(x, self.mask)
         return self.net(_stack_regions(x))
 
 
@@ -79,6 +81,8 @@ class Fusion(nn.Module):
     def _feat(p, batch):
         if isinstance(p, ImageNet):
             x = p.espec(batch["eeg"]) if p.source == "eegspec" else batch["spec"]
+            if p.training and p.mask:
+                x = spec_mask(x, p.mask)
             return p.net.forward_head(p.net.forward_features(_stack_regions(x)), pre_logits=True)
         x = p.blocks(p.stem(batch["eeg"]))
         x, _ = p.gru(x.transpose(1, 2))
@@ -92,7 +96,7 @@ def build_model(cfg: dict) -> nn.Module:
     kind = cfg["kind"]
     if kind in ("spec", "eegspec"):
         return ImageNet(kind, cfg.get("backbone", "efficientnet_b0"), cfg.get("pretrained", True),
-                        cfg.get("drop", 0.3), cfg.get("drop_path", 0.1))
+                        cfg.get("drop", 0.3), cfg.get("drop_path", 0.1), cfg.get("mask", 0))
     if kind == "eeg1d":
         return EEG1D(cfg.get("width", 48), cfg.get("drop", 0.3))
     if kind == "fusion":

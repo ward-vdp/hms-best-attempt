@@ -27,3 +27,18 @@ class EEGSpec(nn.Module):
         m = s.mean(dim=(2, 3), keepdim=True)
         sd = s.std(dim=(2, 3), keepdim=True)
         return (s - m) / (sd + 1e-4)
+
+
+def spec_mask(x, n=2, f_frac=0.12, t_frac=0.12):
+    """SpecAugment on (B, 4, F, T) standardised spectrograms: n random frequency and time bands set to 0 (= mean)."""
+    b, _, f, t = x.shape
+    x = x.clone()
+    for i in range(b):
+        for _ in range(n):
+            w = int(torch.randint(1, max(2, int(f * f_frac)), (1,)))
+            s0 = int(torch.randint(0, f - w + 1, (1,)))
+            x[i, :, s0:s0 + w, :] = 0
+            w = int(torch.randint(1, max(2, int(t * t_frac)), (1,)))
+            s0 = int(torch.randint(0, t - w + 1, (1,)))
+            x[i, :, :, s0:s0 + w] = 0
+    return x
