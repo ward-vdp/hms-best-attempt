@@ -19,9 +19,10 @@ from torch.utils.data import DataLoader
 
 from .constants import CLASSES, MIRROR_CHANNELS, MIRROR_REGIONS, TARGET_COLS
 from .data import assign_folds, load_train_meta
-from .dataset import HMSDataset
+from .dataset import HMSDataset, RowDataset
 from .metrics import kl_divergence
 from .models import build_model
+from .teacher import PRED_COLS, attach, load_teacher
 
 
 def load_config(path, overrides=()):
@@ -92,6 +93,25 @@ def predict(model, loader, dev, tta=True):
     return np.concatenate(P), np.concatenate(Y), np.concatenate(N), np.concatenate(ID)
 
 
+@torch.no_grad()
+def predict_rows(model, rows, cfg, dkw, dev):
+    """Mirror-TTA predictions for every row (window) of `rows` -> DataFrame(label_id, pred_*)."""
+    model.eval()
+    loader = DataLoader(RowDataset(rows, **dkw), batch_size=cfg["batch_size"] * 2, num_workers=cfg.get("num_workers", 4))
+    P, L = [], []
+    for batch in loader:
+        L.append(batch["label_id"].numpy())
+        batch = to_dev(batch, dev)
+        with torch.autocast(dev.type, enabled=dev.type == "cuda"):
+            p = model(batch).float().softmax(1)
+            fb = dict(batch); fb["eeg"] = batch["eeg"][:, MIRROR_CHANNELS]; fb["spec"] = batch["spec"][:, MIRROR_REGIONS]
+            p = 0.5 * (p + model(fb).float().softmax(1))
+        P.append(p.cpu().numpy())
+    out = pd.DataFrame(np.concatenate(P), columns=PRED_COLS)
+    out.insert(0, "label_id", np.concatenate(L))
+    return out
+
+
 def run_fold(cfg, df, fold, dev, out_dir):
     tr, va = df[df.fold != fold], df[df.fold == fold]
     dkw = dict(cache_dir=cfg["cache_dir"], spec_rows=cfg.get("spec_rows", 300), filt=cfg.get("filt", True),
@@ -111,7 +131,8 @@ def run_fold(cfg, df, fold, dev, out_dir):
         ds = HMSDataset(tr, mode="train", min_votes=st.get("min_votes", 0),
                         target_mean_w=cfg.get("target_mean_w", 0.0),
                         label_smooth=cfg.get("label_smooth", 0.0), shift_s=cfg.get("shift_s", 0.0),
-                        label_prior=cfg.get("label_prior", "uniform"), **dkw)
+                        label_prior=cfg.get("label_prior", "uniform"),
+                        teacher_tau=st.get("teacher_tau", cfg.get("teacher_tau", 0.0)), **dkw)
         loader = DataLoader(ds, batch_size=cfg["batch_size"], shuffle=True, num_workers=nw,
                             drop_last=True, pin_memory=dev.type == "cuda", persistent_workers=nw > 0)
         steps = st["epochs"] * len(loader)
@@ -148,6 +169,8 @@ def run_fold(cfg, df, fold, dev, out_dir):
                 break
     p, y, n, ids = predict(ema, val_loader, dev, tta=cfg.get("tta", True))
     torch.save(ema.module.state_dict(), os.path.join(out_dir, f"fold{fold}.pt"))
+    if cfg.get("save_row_preds"):               # out-of-fold predictions for ALL windows of this fold (teacher labels)
+        predict_rows(ema, va, cfg, dkw, dev).to_csv(os.path.join(out_dir, f"rows_fold{fold}.csv"), index=False)
     oof = pd.DataFrame(p, columns=[f"pred_{c}" for c in CLASSES])
     oof[TARGET_COLS] = y; oof["n_votes"] = n; oof["eeg_id"] = ids; oof["fold"] = fold
     return oof
@@ -167,6 +190,15 @@ def main():
     if cfg.get("limit_eegs"):                  # debug subset: first N eeg_ids (matches prep --limit)
         df = df[df.eeg_id.isin(sorted(df.eeg_id.unique())[:cfg["limit_eegs"]])]
     df = assign_folds(df, cfg["folds"], cfg["seed"])
+    if cfg.get("exclude_folds"):               # nested CV: these folds are invisible to this run (see hmsbest/teacher.py)
+        df = df[~df.fold.isin(cfg["exclude_folds"])]
+    if cfg.get("teacher_csv"):
+        df, tau, cover = attach(df, load_teacher(cfg["teacher_csv"]), cfg.get("teacher_tau", "auto"))
+        cfg["teacher_tau"] = tau
+        for st in cfg["stages"]:
+            if st.get("teacher_tau") == "auto":
+                st["teacher_tau"] = tau
+        print(f"teacher: tau={tau:.2f} pseudo-annotators, coverage {cover:.1%} of rows", flush=True)
     oofs = [run_fold(cfg, df, f, dev, out_dir) for f in cfg.get("run_folds", range(cfg["folds"]))]
     oof = pd.concat(oofs, ignore_index=True)
     oof.to_csv(os.path.join(out_dir, "oof.csv"), index=False)

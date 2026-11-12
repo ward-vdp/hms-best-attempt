@@ -195,3 +195,53 @@ def test_siamese_is_mirror_invariant_and_vote_cond(fake_root, cache):
     with torch.no_grad():
         o1 = m(b); b2 = dict(b); b2["n"] = b["n"] * 0 + 1; o2 = m(b2)
     assert torch.allclose(o1, o2)          # inference ignores the true vote count
+
+
+def test_teacher_math():
+    from hmsbest.teacher import estimate_tau, refine
+    rng = np.random.default_rng(0)
+    q = rng.dirichlet(np.ones(6) * 0.5, 3000)
+    votes = np.stack([rng.multinomial(3, qi) for qi in q]).astype(np.float64)
+    # perfect teacher -> large tau; teacher = noise around q with known concentration -> tau near it; useless -> small
+    assert estimate_tau(votes, q) >= 32
+    noisy = np.stack([rng.dirichlet(8 * qi + 1e-3) for qi in q])
+    useless = rng.dirichlet(np.ones(6), 3000)
+    t_noisy, t_bad = estimate_tau(votes, noisy), estimate_tau(votes, useless)
+    assert t_bad < t_noisy / 2 and t_noisy < 32
+    y = np.array([[1, 0, 0, 0, 0, 0]], np.float32); p = np.array([[0.4, 0.6, 0, 0, 0, 0]], np.float32)
+    r3, r20 = refine(y, [3], p, 3.0), refine(y, [20], p, 3.0)
+    assert np.allclose(r3, [[0.7, 0.3, 0, 0, 0, 0]]) and r20[0, 0] > 0.9 and np.allclose(r3.sum(), 1)
+
+
+def test_teacher_end_to_end_nested(fake_root, cache, tmp_path):
+    """Teachers that never see fold 0 write row predictions for folds 1,2; the fold-0 student trains on refined labels."""
+    base = dict(seed=1, folds=3, data_root=str(fake_root), cache_dir=str(cache), out_dir=str(tmp_path / "runs"),
+                results_csv=str(tmp_path / "results.csv"), batch_size=4, num_workers=0, max_steps=2, ema=0.9,
+                model=dict(kind="eeg1d"), aug=dict(mirror=True, polarity=True))
+    t = dict(base, name="teach", run_folds=[1, 2], exclude_folds=[0], save_row_preds=True,
+             stages=[dict(epochs=1, lr=1e-3, min_votes=0, weight="votes")])
+    p = tmp_path / "t.yaml"; p.write_text(yaml.safe_dump(t))
+    subprocess.run([sys.executable, "-m", "hmsbest.train", "--config", str(p)], check=True)
+    df = assign_folds(load_train_meta(fake_root / "train.csv"), 3, 1)
+    rows = pd.concat([pd.read_csv(tmp_path / "runs" / "teach" / f"rows_fold{f}.csv") for f in (1, 2)])
+    assert set(rows.label_id) == set(df[df.fold != 0].label_id)          # every non-validation row, nothing of fold 0
+    assert np.allclose(rows.iloc[:, 1:].sum(axis=1), 1, atol=1e-4)
+    s = dict(base, name="stud", run_folds=[0], teacher_csv=str(tmp_path / "runs" / "teach" / "rows_fold*.csv"),
+             stages=[dict(epochs=1, lr=1e-3, min_votes=0, weight="votes"),
+                     dict(epochs=1, lr=1e-4, min_votes=0, weight="none", teacher_tau="auto")])
+    p = tmp_path / "s.yaml"; p.write_text(yaml.safe_dump(s))
+    r = subprocess.run([sys.executable, "-m", "hmsbest.train", "--config", str(p)], check=True, capture_output=True, text=True)
+    assert "teacher: tau=" in r.stdout
+    assert np.isfinite(pd.read_csv(tmp_path / "results.csv").kl_all).all()
+
+
+def test_teacher_refines_only_train_targets(fake_root, cache):
+    from hmsbest.constants import CLASSES
+    df = assign_folds(load_train_meta(fake_root / "train.csv"), 5, 42)
+    for c in CLASSES:
+        df[f"t_{c}"] = 1.0 / 6
+    tr = HMSDataset(df, str(cache), "train", teacher_tau=1e6)
+    ev = HMSDataset(df, str(cache), "eval", teacher_tau=1e6)
+    assert np.allclose(tr[0]["y"].numpy(), 1 / 6, atol=1e-3)            # huge tau -> teacher label
+    k = ev.eval_pick[0]
+    assert np.allclose(ev[0]["y"].numpy(), ev.groups[0]["y"][k])        # validation labels untouched

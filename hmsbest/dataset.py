@@ -4,7 +4,7 @@ import pandas as pd
 import torch
 from torch.utils.data import Dataset
 
-from .constants import EEG_LEN, FS, TARGET_COLS
+from .constants import CLASSES, EEG_LEN, FS, TARGET_COLS
 from .signal import eeg_window, spec_window
 
 
@@ -12,7 +12,7 @@ class HMSDataset(Dataset):
     def __init__(self, rows: pd.DataFrame, cache_dir: str, mode: str = "train",
                  min_votes: int = 0, spec_rows: int = 300, filt: bool = True, eeg_hi: float = 40.0,
                  target_mean_w: float = 0.0, label_smooth: float = 0.0, shift_s: float = 0.0,
-                 label_prior: str = "uniform"):
+                 label_prior: str = "uniform", teacher_tau: float = 0.0):
         assert mode in ("train", "eval")
         self.cache, self.mode, self.spec_rows, self.filt = cache_dir, mode, spec_rows, filt
         self.eeg_hi = eeg_hi
@@ -28,6 +28,8 @@ class HMSDataset(Dataset):
             self.prior = (v.sum(0) / v.sum()).astype(np.float32)
         else:
             self.prior = np.full(k, 1.0 / k, np.float32)
+        # teacher-refined labels (train only, see hmsbest/teacher.py): rows need columns t_<class>; NaN = no teacher
+        self.tau = teacher_tau if (mode == "train" and f"t_{CLASSES[0]}" in rows.columns) else 0.0
         r = rows[rows.n_votes >= min_votes] if mode == "train" else rows
         self.groups = []
         for eeg_id, g in r.groupby("eeg_id", sort=True):
@@ -36,7 +38,8 @@ class HMSDataset(Dataset):
                 eeg_off=g.eeg_label_offset_seconds.to_numpy(np.float32),
                 spec_off=g.spectrogram_label_offset_seconds.to_numpy(np.float32),
                 y=g[TARGET_COLS].to_numpy(np.float32), n=g.n_votes.to_numpy(np.float32),
-                y_mean=g[TARGET_COLS].to_numpy(np.float32).mean(0), n_mean=float(g.n_votes.mean())))
+                y_mean=g[TARGET_COLS].to_numpy(np.float32).mean(0), n_mean=float(g.n_votes.mean()),
+                t=g[[f"t_{c}" for c in CLASSES]].to_numpy(np.float32) if self.tau > 0 else None))
         # eval: one fixed window per eeg_id = the one with the most annotators (first on ties)
         self.eval_pick = [int(np.argmax(g["n"])) for g in self.groups]
         self.eval_meta = pd.DataFrame({
@@ -55,6 +58,8 @@ class HMSDataset(Dataset):
         if self.shift > 0:
             off = float(np.clip(off + (float(torch.rand(1)) * 2 - 1) * self.shift, 0.0, max(0.0, eeg.shape[1] / FS - EEG_LEN / FS)))
         y, n = (1 - self.tw) * g["y"][k] + self.tw * g["y_mean"], (1 - self.tw) * g["n"][k] + self.tw * g["n_mean"]
+        if self.tau > 0 and np.isfinite(g["t"][k]).all():
+            y, n = (n * y + self.tau * g["t"][k]) / (n + self.tau), n + self.tau
         if self.ls > 0:
             nc = len(TARGET_COLS)
             y = (y * n + self.ls * nc * self.prior) / (n + nc * self.ls)
@@ -64,3 +69,23 @@ class HMSDataset(Dataset):
             y=torch.from_numpy(y.astype(np.float32)),
             n=torch.tensor(float(n)),
             eeg_id=g["eeg_id"])
+
+
+class RowDataset(Dataset):
+    """Every labelled window (row of train.csv) once, for writing per-row teacher predictions."""
+
+    def __init__(self, rows, cache_dir, spec_rows=300, filt=True, eeg_hi=40.0):
+        self.r = rows.reset_index(drop=True)
+        self.cache, self.spec_rows, self.filt, self.eeg_hi = cache_dir, spec_rows, filt, eeg_hi
+
+    def __len__(self):
+        return len(self.r)
+
+    def __getitem__(self, i):
+        r = self.r.iloc[i]
+        eeg = np.load(f"{self.cache}/eeg/{int(r.eeg_id)}.npy", mmap_mode="r")
+        spec = np.load(f"{self.cache}/spec/{int(r.spectrogram_id)}.npy", mmap_mode="r")
+        return dict(
+            eeg=torch.from_numpy(eeg_window(eeg, float(r.eeg_label_offset_seconds), lo=0.5 if self.filt else None, hi=self.eeg_hi)),
+            spec=torch.from_numpy(spec_window(spec, float(r.spectrogram_label_offset_seconds), self.spec_rows)),
+            label_id=int(r.label_id))
