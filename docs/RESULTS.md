@@ -46,3 +46,13 @@ Ronde 2 (Version 5; Version 4 liet die ronde door een startup-race in `progress(
 
 Conclusie job 06/07: tricks helpen de spectrogram-variant (-0.012 op >=6) maar niet eegimg; eegimg B0 (0.361) is niet beter dan eegspec B0 (0.355).
 Verschillen < ~0.005 zijn op één fold ruis. Sterkste hefboom blijft fusie van verschillende representaties (job 05: 0.329).
+
+Job 08 (Kaggle Version 6, late fusie van verschillende representaties, fold 0; tricks aan, eeg_hi 40 Hz, 6+3 epochs):
+
+| run | model | KL all | KL >=6 | KL >=10 | opmerking |
+|---|---|---|---|---|---|
+| fusion_spec_img_tricks | eigen-spec B0 (masking) + eegimg B0 | 0.629 | 0.298 | 0.292 | grote sprong t.o.v. beste vorige (0.667 / 0.329 / 0.321) |
+| fusion_spec_eeg1d_img_tricks | eigen-spec B0 + EEG-CNN + eegimg B0 | **0.602** | 0.299 | 0.293 | beste "all"; >=6 gelijk aan 2-delige fusie, 33 min/run op T4 |
+
+Conclusie: de ene representatie voegt weinig toe (eegimg B0 alleen 0.361), maar gefuseerd met de spectrogramtak geeft het -0.03 op >=6 en -0.04 à -0.07 op "all".
+Diversiteit tussen representaties is de hefboom; de trainfout (0.19) is nog steeds veel lager dan de validatie (0.31).
