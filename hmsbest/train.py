@@ -14,7 +14,7 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 import yaml
-from torch.optim.swa_utils import AveragedModel, get_ema_multi_avg_fn
+from torch.optim.swa_utils import AveragedModel
 from torch.utils.data import DataLoader
 
 from .constants import CLASSES, MIRROR_CHANNELS, MIRROR_REGIONS, TARGET_COLS
@@ -90,7 +90,9 @@ def run_fold(cfg, df, fold, dev, out_dir):
 
     torch.manual_seed(cfg["seed"] + fold)
     model = build_model(cfg["model"]).to(dev)
-    ema = AveragedModel(model, multi_avg_fn=get_ema_multi_avg_fn(cfg.get("ema", 0.998)), use_buffers=True)
+    d = cfg.get("ema", 0.998)
+    # EMA with warm-up: decay grows from ~0.1 to d, so short runs are not stuck near the initial weights
+    ema = AveragedModel(model, use_buffers=True, avg_fn=lambda a, p, n: a + (p - a) * (1 - min(d, (1 + n) / (10 + n))))
     scaler = torch.amp.GradScaler(enabled=dev.type == "cuda")
     t0 = time.time()
     for si, st in enumerate(cfg["stages"]):

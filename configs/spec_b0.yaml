@@ -1,7 +1,7 @@
 name: spec_b0
 seed: 42
 folds: 5
-data_root: /kaggle/input/hms-harmful-brain-activity-classification
+data_root: /kaggle/input/competitions/hms-harmful-brain-activity-classification
 cache_dir: /kaggle/working/cache
 out_dir: /kaggle/working/runs
 results_csv: /kaggle/working/results.csv
