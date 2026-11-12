@@ -10,10 +10,22 @@ Alle runs op Kaggle (T4). Schema, tenzij anders vermeld: 6 epochs (alle vensters
 | eeg1d_f0 | ruwe EEG: ResNet-1D + BiGRU | 0.837 | 0.436 | 20 min* | *2 runs parallel op 2 GPU's |
 | eegspec_b0_f0 | EfficientNet-B0 op eigen STFT-spectrogram uit EEG (4 regio's, 0.5-40 Hz) | 0.699 | 0.365 | 20 min* | beter dan Kaggle-spectrogram op >=6 |
 | fusion_spec_eeg1d_f0 | late fusie Kaggle-spec B0 + EEG-CNN | 0.660 | 0.374 | 22 min* | beste "alle" |
-| fusion_eegspec_eeg1d_f0 | late fusie eigen-spec B0 + EEG-CNN | 0.671 | 0.339 | 21 min* | beste >=6 |
+| fusion_eegspec_eeg1d_f0 | late fusie eigen-spec B0 + EEG-CNN | 0.671 | 0.339 | 21 min* | beste >=6 (job 04) |
+
+Job 05 (Kaggle Version 2, XY/SpecAugment-masking + mixup, extra kolom KL >=10):
+
+| run | model | KL all | KL >=6 | KL >=10 | opmerking |
+|---|---|---|---|---|---|
+| eegspec_mask | B0 eigen-spec + masking (2 banden) | 0.755 | 0.367 | 0.357 | masking alleen: "all" slechter dan zonder (0.699), >=6 gelijk |
+| eegspec_mask_mixup | idem + mixup 0.4 | 0.731 | 0.361 | 0.353 | mixup herstelt een stuk van "all" |
+| fusion_eegspec_eeg1d_mask | late fusie eigen-spec B0 (masking) + EEG-CNN | 0.667 | **0.329** | **0.321** | beste tot nu toe op >=6 en >=10 |
+| eegspec_b2_mask | EfficientNet-B2 eigen-spec + masking | 0.699 | 0.339 | 0.332 | B2 > B0 met dezelfde regularisatie (0.339 vs 0.367 op >=6) |
 
 Observaties (fold 0):
 - Trainverlies ~0.19-0.22 tegenover validatie ~0.34 (>=6): sterke overfitting -> regularisatie/augmentatie is de eerstvolgende hefboom.
 - Stap 2 (alleen >=6 annotators) verbetert KL op >=6 met ~0.04 maar verslechtert "alle" met ~0.015. De testset heeft 3-20 annotators
   (competitiepagina), dus beide maten blijven staan.
 - Alle fusies slaan alle losse modellen op "alle".
+- Job 05: masking verlaagt de trainfout niet meer zover (train 0.30 vs 0.20) maar de validatie verbetert alleen mee bij de grotere backbone en de fusie;
+  met 6+3 epochs onderfit het B0-model nu waarschijnlijk. Langer trainen en grotere backbone zijn dus logisch bij regularisatie.
+- Bron voor de volgende stappen (raw EEG als beeld, label smoothing, time shift): zie docs/IDEAS.md.
