@@ -107,3 +107,15 @@ Foutanalyse (uit `oof_f3p.csv`; zelfde berekening als `hmsbest/analyze.py`):
 Conclusie: de scalogramtak is los de beste, maar in de fusie levert ze nauwelijks iets extra; LRDA/GRDA -> other blijft
 (LRDA 0.35, GRDA 0.42 op other). Op B0 met 6+3 epochs zit fold 0 vast rond 0.283-0.293 ongeacht de representatie:
 de volgende hefbomen zijn labels (teacher, job 11), capaciteit/trainingsduur (job 13) en het ensemble.
+
+## Job 11 (Kaggle Version 9): teacher-verfijnde labels, lekvrij op fold 0 (referentie zelfde model 0.602 / 0.299 / 0.293)
+Teachers: 4 modellen die fold 0 nooit zagen (elk op 60 % van de data). Geschatte waarde van de teacher:
+**tau = 2.83 pseudo-annotators** (maximum likelihood), dekking 78 % van de rijen (alles behalve fold 0).
+
+| run | teacher-labels in | KL all | KL >=6 | KL >=10 | oordeel |
+|---|---|---|---|---|---|
+| stud_s1 | stap 1; stap 2 zoals voorheen (ruwe labels, >= 6 stemmen) | 0.598 | 0.284 | **0.277** | **-0.016 op >=10**, 2x de foldruis -> overnemen |
+| stud_both | stap 1 en stap 2 (stap 2 op alle vensters) | 0.561 | 0.299 | 0.294 | "all" beter, >=10 niet: stap 2 op laag-stem-rijen houdt het model in de laag-stem-stijl |
+
+Verbetering bij stud_s1 zit vooral bij LPD (KL dominant 0.371 -> 0.334) en de 15+-stem-rijen (0.271 -> 0.250).
+Conclusie: teacher-labels als betere voortraining (stap 1), daarna nog steeds specialiseren op veel-stem-rijen.

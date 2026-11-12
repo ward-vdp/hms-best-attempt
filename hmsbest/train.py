@@ -112,7 +112,7 @@ def predict_rows(model, rows, cfg, dkw, dev):
     return out
 
 
-def run_fold(cfg, df, fold, dev, out_dir):
+def run_fold(cfg, df, fold, dev, out_dir, df_excl=None):
     tr, va = df[df.fold != fold], df[df.fold == fold]
     dkw = dict(cache_dir=cfg["cache_dir"], spec_rows=cfg.get("spec_rows", 300), filt=cfg.get("filt", True),
                eeg_hi=cfg.get("eeg_hi", 40.0))
@@ -169,8 +169,14 @@ def run_fold(cfg, df, fold, dev, out_dir):
                 break
     p, y, n, ids = predict(ema, val_loader, dev, tta=cfg.get("tta", True))
     torch.save(ema.module.state_dict(), os.path.join(out_dir, f"fold{fold}.pt"))
-    if cfg.get("save_row_preds"):               # out-of-fold predictions for ALL windows of this fold (teacher labels)
-        predict_rows(ema, va, cfg, dkw, dev).to_csv(os.path.join(out_dir, f"rows_fold{fold}.csv"), index=False)
+    if cfg.get("save_row_preds"):
+        # Out-of-fold predictions for ALL windows (teacher labels). File rows_for{S}_fold{G}.csv: predictions for the rows
+        # of fold G that are safe to use for a student validated on fold S ('x' = no fold was held out for a student).
+        ex = cfg.get("exclude_folds") or []
+        tag = ex[0] if len(ex) == 1 else "x"
+        predict_rows(ema, va, cfg, dkw, dev).to_csv(os.path.join(out_dir, f"rows_for{tag}_fold{fold}.csv"), index=False)
+        if len(ex) == 1 and df_excl is not None:    # pair model T{S,G}: also out-of-fold for S -> serves student G
+            predict_rows(ema, df_excl, cfg, dkw, dev).to_csv(os.path.join(out_dir, f"rows_for{fold}_fold{tag}.csv"), index=False)
     oof = pd.DataFrame(p, columns=[f"pred_{c}" for c in CLASSES])
     oof[TARGET_COLS] = y; oof["n_votes"] = n; oof["eeg_id"] = ids; oof["fold"] = fold
     return oof
@@ -190,7 +196,9 @@ def main():
     if cfg.get("limit_eegs"):                  # debug subset: first N eeg_ids (matches prep --limit)
         df = df[df.eeg_id.isin(sorted(df.eeg_id.unique())[:cfg["limit_eegs"]])]
     df = assign_folds(df, cfg["folds"], cfg["seed"])
+    df_excl = None
     if cfg.get("exclude_folds"):               # nested CV: these folds are invisible to this run (see hmsbest/teacher.py)
+        df_excl = df[df.fold.isin(cfg["exclude_folds"])]
         df = df[~df.fold.isin(cfg["exclude_folds"])]
     if cfg.get("teacher_csv"):
         df, tau, cover = attach(df, load_teacher(cfg["teacher_csv"]), cfg.get("teacher_tau", "auto"))
@@ -199,7 +207,7 @@ def main():
             if st.get("teacher_tau") == "auto":
                 st["teacher_tau"] = tau
         print(f"teacher: tau={tau:.2f} pseudo-annotators, coverage {cover:.1%} of rows", flush=True)
-    oofs = [run_fold(cfg, df, f, dev, out_dir) for f in cfg.get("run_folds", range(cfg["folds"]))]
+    oofs = [run_fold(cfg, df, f, dev, out_dir, df_excl) for f in cfg.get("run_folds", range(cfg["folds"]))]
     oof = pd.concat(oofs, ignore_index=True)
     oof.to_csv(os.path.join(out_dir, "oof.csv"), index=False)
     pc = [f"pred_{c}" for c in CLASSES]

@@ -214,24 +214,27 @@ def test_teacher_math():
 
 
 def test_teacher_end_to_end_nested(fake_root, cache, tmp_path):
-    """Teachers that never see fold 0 write row predictions for folds 1,2; the fold-0 student trains on refined labels."""
+    """Pair teachers T{0,g} never see fold 0; the fold-0 student trains on labels refined with their predictions."""
     base = dict(seed=1, folds=3, data_root=str(fake_root), cache_dir=str(cache), out_dir=str(tmp_path / "runs"),
                 results_csv=str(tmp_path / "results.csv"), batch_size=4, num_workers=0, max_steps=2, ema=0.9,
                 model=dict(kind="eeg1d"), aug=dict(mirror=True, polarity=True))
-    t = dict(base, name="teach", run_folds=[1, 2], exclude_folds=[0], save_row_preds=True,
+    t = dict(base, name="pair_e0", run_folds=[1, 2], exclude_folds=[0], save_row_preds=True,
              stages=[dict(epochs=1, lr=1e-3, min_votes=0, weight="votes")])
     p = tmp_path / "t.yaml"; p.write_text(yaml.safe_dump(t))
     subprocess.run([sys.executable, "-m", "hmsbest.train", "--config", str(p)], check=True)
     df = assign_folds(load_train_meta(fake_root / "train.csv"), 3, 1)
-    rows = pd.concat([pd.read_csv(tmp_path / "runs" / "teach" / f"rows_fold{f}.csv") for f in (1, 2)])
+    d = tmp_path / "runs" / "pair_e0"
+    rows = pd.concat([pd.read_csv(d / f"rows_for0_fold{f}.csv") for f in (1, 2)])
     assert set(rows.label_id) == set(df[df.fold != 0].label_id)          # every non-validation row, nothing of fold 0
     assert np.allclose(rows.iloc[:, 1:].sum(axis=1), 1, atol=1e-4)
-    s = dict(base, name="stud", run_folds=[0], teacher_csv=str(tmp_path / "runs" / "teach" / "rows_fold*.csv"),
+    for g in (1, 2):                                                     # the same pair model serves student g with fold 0
+        assert set(pd.read_csv(d / f"rows_for{g}_fold0.csv").label_id) == set(df[df.fold == 0].label_id)
+    s = dict(base, name="stud", run_folds=[0], teacher_csv=str(tmp_path / "runs" / "pair_*" / "rows_for0_*.csv"),
              stages=[dict(epochs=1, lr=1e-3, min_votes=0, weight="votes"),
-                     dict(epochs=1, lr=1e-4, min_votes=0, weight="none", teacher_tau="auto")])
+                     dict(epochs=1, lr=1e-4, min_votes=0, weight="none", teacher_tau=0)])
     p = tmp_path / "s.yaml"; p.write_text(yaml.safe_dump(s))
     r = subprocess.run([sys.executable, "-m", "hmsbest.train", "--config", str(p)], check=True, capture_output=True, text=True)
-    assert "teacher: tau=" in r.stdout
+    assert "teacher: tau=" in r.stdout and "coverage" in r.stdout
     assert np.isfinite(pd.read_csv(tmp_path / "results.csv").kl_all).all()
 
 
