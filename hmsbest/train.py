@@ -83,9 +83,6 @@ def predict(model, loader, dev, tta=True):
 
 def run_fold(cfg, df, fold, dev, out_dir):
     tr, va = df[df.fold != fold], df[df.fold == fold]
-    if cfg.get("limit_eegs"):
-        keep = tr.eeg_id.unique()[:cfg["limit_eegs"]]; tr = tr[tr.eeg_id.isin(keep)]
-        keep = va.eeg_id.unique()[:cfg["limit_eegs"]]; va = va[va.eeg_id.isin(keep)]
     dkw = dict(cache_dir=cfg["cache_dir"], spec_rows=cfg.get("spec_rows", 300), filt=cfg.get("filt", True))
     val_ds = HMSDataset(va, mode="eval", **dkw)
     nw = cfg.get("num_workers", 4)
@@ -148,7 +145,10 @@ def main():
     os.makedirs(out_dir, exist_ok=True)
     yaml.safe_dump(cfg, open(os.path.join(out_dir, "config.yaml"), "w"))
     dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    df = assign_folds(load_train_meta(os.path.join(cfg["data_root"], "train.csv")), cfg["folds"], cfg["seed"])
+    df = load_train_meta(os.path.join(cfg["data_root"], "train.csv"))
+    if cfg.get("limit_eegs"):                  # debug subset: first N eeg_ids (matches prep --limit)
+        df = df[df.eeg_id.isin(sorted(df.eeg_id.unique())[:cfg["limit_eegs"]])]
+    df = assign_folds(df, cfg["folds"], cfg["seed"])
     oofs = [run_fold(cfg, df, f, dev, out_dir) for f in cfg.get("run_folds", range(cfg["folds"]))]
     oof = pd.concat(oofs, ignore_index=True)
     oof.to_csv(os.path.join(out_dir, "oof.csv"), index=False)

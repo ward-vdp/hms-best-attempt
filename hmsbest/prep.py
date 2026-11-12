@@ -36,10 +36,10 @@ def main():
     ap.add_argument("--limit", type=int, default=0, help="debug: only first N ids")
     a = ap.parse_args()
     meta = pd.read_csv(os.path.join(a.data_root, a.meta), usecols=["eeg_id", "spectrogram_id"])
+    if a.limit:   # debug subset: the first N eeg_ids (same rule as `limit_eegs` in train.py)
+        meta = meta[meta.eeg_id.isin(sorted(meta.eeg_id.unique())[:a.limit])]
     eegs = sorted(meta.eeg_id.unique())
     specs = sorted(meta.spectrogram_id.unique())
-    if a.limit:
-        eegs, specs = eegs[:a.limit], specs[:a.limit]
     for sub in ("eeg", "spec"):
         os.makedirs(os.path.join(a.cache_dir, sub), exist_ok=True)
     tag = "train" if "train" in a.meta else "test"
