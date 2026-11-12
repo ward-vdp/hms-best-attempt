@@ -29,3 +29,12 @@ Observaties (fold 0):
 - Job 05: masking verlaagt de trainfout niet meer zover (train 0.30 vs 0.20) maar de validatie verbetert alleen mee bij de grotere backbone en de fusie;
   met 6+3 epochs onderfit het B0-model nu waarschijnlijk. Langer trainen en grotere backbone zijn dus logisch bij regularisatie.
 - Bron voor de volgende stappen (raw EEG als beeld, label smoothing, time shift): zie docs/IDEAS.md.
+
+Job 06 (Kaggle Version 4, ronde 1; tricks = label smoothing 0.02 vóór normalisatie + ±5 s time-shift + target blending 0.5):
+
+| run | model | KL all | KL >=6 | KL >=10 | opmerking |
+|---|---|---|---|---|---|
+| eegspec_mask_tricks | B0 eigen-spec + masking + tricks | 0.725 | 0.355 | 0.346 | tricks helpen t.o.v. eegspec_mask (0.755 / 0.367 / 0.357) |
+| eegimg_b0_tricks | B0 op raw EEG als beeld (0.5-20 Hz) + tricks | 0.734 | 0.361 | 0.351 | iets slechter dan eigen-spec bij B0 en 9 epochs; geen doorbraak, wel andere representatie voor ensemble |
+
+Ronde 2 (eegimg 0.5-40 Hz, eegimg zonder tricks) draaide niet: de runs stopten meteen na de start (logs leeg).
