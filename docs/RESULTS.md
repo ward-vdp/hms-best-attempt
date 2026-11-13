@@ -159,3 +159,11 @@ Kalibratie helpt op >= 10 (-0.0013) maar schaadt "all" (scherpere uitvoer straft
 Foutprofiel (blend, >= 10): LRDA zwakst (KL dominant 0.388; 0.37 massa naar other), GRDA -> other 0.39, LPD grootste aandeel (25 %).
 Model is te onzeker: entropie voorspelling 0.89 vs doel 0.64; unaniem doel KL 0.145, sterke onenigheid 0.303.
 Referentie: top-oplossingen CV ≈ 0.22-0.245 per model; ons ensemble 0.256 zit daar nog ~0.02-0.03 boven.
+
+## Job 16 (Kaggle Version 14) + late submission
+
+Definitieve modellen op 100 % van de data (2 h 03, ≈ 4 GPU-u): FA = B0-fusie, FB = B2-fusie, elk 2 seeds, teacher-labels
+in stap 1 (gemiddelde van de 4 paar-teachers per rij, tau = 3.36, dekking 100 %). Blend 0.5 FB / 0.5 FA, mirror-TTA,
+geen kalibratie. Controle met exact de submissioncode op 400 trainvensters (>= 10 stemmen, in-sample): KL 0.164.
+Inferentie: `notebooks/submit.ipynb` (Kaggle-notebook notebook5b5f4baa99, internet uit, input = output Version 14),
+102 s op de zichtbare test. Late submission ingediend 13-11 23:11.
