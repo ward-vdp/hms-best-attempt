@@ -248,3 +248,36 @@ def test_teacher_refines_only_train_targets(fake_root, cache):
     assert np.allclose(tr[0]["y"].numpy(), 1 / 6, atol=1e-3)            # huge tau -> teacher label
     k = ev.eval_pick[0]
     assert np.allclose(ev[0]["y"].numpy(), ev.groups[0]["y"][k])        # validation labels untouched
+
+
+def test_full_fit_and_infer_matches_training_path(fake_root, cache, tmp_path):
+    """Full-fit training runs, and inference (raw parquet) reproduces the training-time predictions (cached arrays)."""
+    from hmsbest.data import load_train_meta
+    from hmsbest.infer import load_models, predict
+    from hmsbest.signal import eeg_bipolar, spec_log
+    from hmsbest.train import predict_rows
+    m = dict(kind="fusion", parts=[dict(kind="eegspec", backbone="efficientnet_b0", pretrained=False),
+                                   dict(kind="eeg1d"), dict(kind="eegimg", backbone="efficientnet_b0", pretrained=False)])
+    cfg = dict(name="ff", seed=1, folds=3, run_folds=[0], full_fit=True, data_root=str(fake_root), cache_dir=str(cache),
+               out_dir=str(tmp_path / "runs"), results_csv=str(tmp_path / "results.csv"), batch_size=4,
+               num_workers=0, limit_eegs=8, max_steps=2, ema=0.9, model=m, aug=dict(mirror=True),
+               stages=[dict(epochs=1, lr=1e-3, min_votes=0, weight="votes")])
+    p = tmp_path / "c.yaml"; p.write_text(yaml.safe_dump(cfg))
+    subprocess.run([sys.executable, "-m", "hmsbest.train", "--config", str(p)], check=True)
+    exp = tmp_path / "runs" / "ff"
+    r = subprocess.run([sys.executable, "-m", "hmsbest.infer", "--data_root", str(fake_root), "--exp", str(exp),
+                        "--check", "4"], check=True, capture_output=True, text=True)
+    assert "KL" in r.stdout
+    c, models = load_models(str(exp), torch.device("cpu"))
+    rows = load_train_meta(str(fake_root / "train.csv")).head(6)
+    ref = predict_rows(models[0], rows, dict(batch_size=4, num_workers=0),
+                       dict(cache_dir=str(cache), spec_rows=300, filt=True, eeg_hi=40.0), torch.device("cpu"))
+    recs = rows.to_dict("records")
+
+    def load(i):
+        q = recs[i]
+        return (eeg_bipolar(pd.read_parquet(fake_root / "train_eegs" / f"{q['eeg_id']}.parquet")), float(q["eeg_label_offset_seconds"]),
+                spec_log(pd.read_parquet(fake_root / "train_spectrograms" / f"{q['spectrogram_id']}.parquet")),
+                float(q["spectrogram_label_offset_seconds"]))
+    got = predict(len(recs), load, [(c, models, 1.0)], torch.device("cpu"), bs=4)
+    assert np.abs(got - ref[[col for col in ref.columns if col.startswith("pred_")]].to_numpy()).max() < 2e-2

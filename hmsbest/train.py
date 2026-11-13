@@ -114,6 +114,8 @@ def predict_rows(model, rows, cfg, dkw, dev):
 
 def run_fold(cfg, df, fold, dev, out_dir, df_excl=None):
     tr, va = df[df.fold != fold], df[df.fold == fold]
+    if cfg.get("full_fit"):                     # final model: train on everything; 'va' is then only an in-sample monitor
+        tr = df
     dkw = dict(cache_dir=cfg["cache_dir"], spec_rows=cfg.get("spec_rows", 300), filt=cfg.get("filt", True),
                eeg_hi=cfg.get("eeg_hi", 40.0))
     val_ds = HMSDataset(va, mode="eval", **dkw)
