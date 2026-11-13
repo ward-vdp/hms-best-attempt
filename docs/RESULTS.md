@@ -167,3 +167,8 @@ in stap 1 (gemiddelde van de 4 paar-teachers per rij, tau = 3.36, dekking 100 %)
 geen kalibratie. Controle met exact de submissioncode op 400 trainvensters (>= 10 stemmen, in-sample): KL 0.164.
 Inferentie: `notebooks/submit.ipynb` (Kaggle-notebook notebook5b5f4baa99, internet uit, input = output Version 14),
 102 s op de zichtbare test. Late submission ingediend 13-11 23:11.
+
+**Score late submission: private 0.3165, public 0.2738.** Op de private leaderboard zou dat plaats 34 zijn
+(33e = 0.3161, 34e = 0.3172; 1e = 0.2723, 10e = 0.2867, 20e = 0.3029). Telt niet mee (na de deadline).
+CV (>= 10) 0.256 -> private 0.317: verschil 0.06, veel groter dan bij Team Sony (CV ~0.22-0.23 -> 0.272, verschil ~0.045).
+Public 0.274 ligt dicht bij de CV; de private test wijkt bij iedereen sterk af van public (bekende shake-up in deze competitie).
