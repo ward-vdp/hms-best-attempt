@@ -129,3 +129,13 @@ Conclusie: teacher-labels als betere voortraining (stap 1), daarna nog steeds sp
 
 Conclusie: langer trainen schrappen. B2 is een kandidaat voor het tweede ensemble-model (andere backbone = diversiteit),
 niet voor de teachers. Job 14 (Version 12, lekvrije 5-fold met teacher-labels, B0, 6+3) loopt.
+
+## Job 14 (Kaggle Version 12): lekvrije 5-fold met teacher-verfijnde labels (B0-fusie, prior global, 6+3 epochs)
+
+**5-fold OOF KL: 0.566 (alle) / 0.268 (>= 6) / 0.266 (>= 10)**; zonder teacher (job 09): 0.565 / 0.278 / 0.275.
+Per fold op >= 10 (zonder -> met teacher): 0.293 -> 0.279, 0.252 -> 0.241, 0.290 -> 0.287, 0.270 -> 0.257, 0.266 -> 0.259:
+**alle vijf de folds verbeteren**, gemiddeld -0.010. (Let op: job 09 had nog de uniforme prior; die was op fold 0 goed voor
+~0.005, dus het zuivere teacher-effect is 0.005-0.010; op fold 0 lekvrij gemeten -0.016 met uniforme prior.)
+tau per student: 2.83-3.36 pseudo-annotators. Gecross-fitte kalibratie: 0.2657 -> 0.2641 (klein, T = 1.04).
+De 10 paar-teachers zelf (60 % data): 0.280-0.288 op >= 10.
+Foutprofiel onveranderd: LRDA blijft het zwakst (KL dominant 0.402; 0.37 massa op other), GRDA -> other 0.40.
