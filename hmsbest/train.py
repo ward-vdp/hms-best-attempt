@@ -195,7 +195,7 @@ def main():
     df = load_train_meta(os.path.join(cfg["data_root"], "train.csv"))
     if cfg.get("limit_eegs"):                  # debug subset: first N eeg_ids (matches prep --limit)
         df = df[df.eeg_id.isin(sorted(df.eeg_id.unique())[:cfg["limit_eegs"]])]
-    df = assign_folds(df, cfg["folds"], cfg["seed"])
+    df = assign_folds(df, cfg["folds"], cfg.get("fold_seed", cfg["seed"]))   # fold_seed: keep folds fixed across model seeds
     df_excl = None
     if cfg.get("exclude_folds"):               # nested CV: these folds are invisible to this run (see hmsbest/teacher.py)
         df_excl = df[df.fold.isin(cfg["exclude_folds"])]
