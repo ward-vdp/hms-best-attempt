@@ -139,3 +139,23 @@ Per fold op >= 10 (zonder -> met teacher): 0.293 -> 0.279, 0.252 -> 0.241, 0.290
 tau per student: 2.83-3.36 pseudo-annotators. Gecross-fitte kalibratie: 0.2657 -> 0.2641 (klein, T = 1.04).
 De 10 paar-teachers zelf (60 % data): 0.280-0.288 op >= 10.
 Foutprofiel onveranderd: LRDA blijft het zwakst (KL dominant 0.402; 0.37 massa op other), GRDA -> other 0.40.
+
+## Job 15 (Kaggle Version 13): ensemble van drie lekvrije 5-fold-modellen met teacher-labels (13 774 s ≈ 3.8 GPU-u)
+
+| model | wat | KL all | KL >=6 | KL >=10 |
+|---|---|---|---|---|
+| A | B0-fusie (job 14) | 0.566 | 0.268 | 0.266 |
+| A2 | B0-fusie, seed 7 (zelfde folds) | 0.570 | 0.270 | 0.267 |
+| B | B2-fusie, batch 32 | 0.560 | 0.265 | 0.263 |
+| gelijk gemiddelde | | 0.555 | 0.260 | 0.257 |
+| geometrisch gemiddelde | | 0.557 | 0.260 | 0.257 |
+| gecross-fit gewogen blend (≈ 0.28 A / 0.26 A2 / 0.47 B) | | 0.554 | 0.260 | **0.257** |
+| + gecross-fitte kalibratie | | 0.575 | 0.258 | **0.256** |
+
+Per fold (>= 10, blend): 0.270 / 0.235 / 0.275 / 0.250 / 0.249.
+B2 is het beste losse model (-0.003 t.o.v. A, consistent met fold 0); een tweede seed van hetzelfde model voegt bijna evenveel
+toe als een andere backbone: de ensemblewinst (-0.006 t.o.v. B) is vooral variantiereductie. Gewichten stabiel over folds.
+Kalibratie helpt op >= 10 (-0.0013) maar schaadt "all" (scherpere uitvoer straft laag-stem-rijen); voor de test (>= 10-achtig) aanhouden.
+Foutprofiel (blend, >= 10): LRDA zwakst (KL dominant 0.388; 0.37 massa naar other), GRDA -> other 0.39, LPD grootste aandeel (25 %).
+Model is te onzeker: entropie voorspelling 0.89 vs doel 0.64; unaniem doel KL 0.145, sterke onenigheid 0.303.
+Referentie: top-oplossingen CV ≈ 0.22-0.245 per model; ons ensemble 0.256 zit daar nog ~0.02-0.03 boven.
