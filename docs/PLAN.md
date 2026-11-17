@@ -64,3 +64,22 @@ Budget: Kaggle 30 GPU-uur/week (reset in het weekend), na vanavond ~9 u verbruik
   5-fold OOF KL op alle / >= 6 / >= 10.
 - Reserve ~4 u voor herstarts. Niets indienen; leaderboard-vergelijking blijft indirect (winnaars: CV 0.22-0.245 per model
   op per-eeg_id gemiddelde labels >= 10; private 0.27).
+
+## Eindspurt tot 22/11 (geschreven 18/11, tijdens job 17)
+
+Kaggle-notebooks van deze sandbox (titels met prefix CLAUDE, zodat ze niet te verwarren zijn met Wards eigen notebooks):
+- `CLAUDE hms-best-attempt train (runner)` (was notebookfa1e2f980e): runner, `jobs/current.sh` via git pull, internet aan, GPU T4 x2.
+- `CLAUDE hms-best-attempt submit (offline)` (was notebook5b5f4baa99): `notebooks/submit.ipynb`, internet uit.
+- (gepland) `CLAUDE hms-best-attempt weights`: `notebooks/weights_store.ipynb`, CPU; kopieert runs uit een andere versie van de runner.
+Reden voor dat derde notebook: een notebook-output als input is aan één versie vastgepind (menu: alleen "Check for updates"
+of "Remove"), dus FA/FB (versie 14) en D (versie 15) kunnen niet via hetzelfde notebook binnenkomen.
+
+Beslisregels (vooraf vastgelegd, zodat de keuze niet op de private score gebeurt):
+1. D gaat in de inzending als de gecross-fitte blend met D op >= 10 minstens 0.003 beter is dan A+A2+B (0.2569).
+   Motivatie: verschil tussen seeds per fold <= 0.006, dus op het 5-fold-gemiddelde ~0.002; 0.003 is ~1.5x die ruis.
+2. Blendgewichten van de inzending = de gecross-fitte OOF-gewichten: FA krijgt het gewicht van A + A2, FB dat van B,
+   D dat van D. De 5 foldmodellen van D worden zelf gemiddeld (geen full-fit nodig).
+3. Precies één "hoofdinzending" gekozen op CV. Extra inzendingen alleen als diagnose (bv. D alleen) en apart gerapporteerd:
+   kiezen op de private score is selectie op de testset en maakt dat getal optimistisch.
+4. GPU: na job 17 ~7 van 30 uur gebruikt. Nieuwe trainingsruns alleen als D helpt en er een gerichte vervolgstap is;
+   Wards eigen opdracht (deadline 30/11) heeft voorrang.

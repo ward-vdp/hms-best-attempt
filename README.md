@@ -27,3 +27,5 @@ python -m hmsbest.train --config configs/spec_b0.yaml
 python -m hmsbest.infer --data_root ... --exp /kaggle/working/runs/spec_b0:1.0 --out submission.csv
 ```
 Tests (CPU, synthetische data): `pytest -q`.
+
+Kaggle-notebooks van deze sandbox dragen het prefix **CLAUDE** (zie `docs/PLAN.md`, Eindspurt).
