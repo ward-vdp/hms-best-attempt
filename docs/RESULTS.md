@@ -172,3 +172,17 @@ Inferentie: `notebooks/submit.ipynb` (Kaggle-notebook notebook5b5f4baa99, intern
 (33e = 0.3161, 34e = 0.3172; 1e = 0.2723, 10e = 0.2867, 20e = 0.3029). Telt niet mee (na de deadline).
 CV (>= 10) 0.256 -> private 0.317: verschil 0.06, veel groter dan bij Team Sony (CV ~0.22-0.23 -> 0.272, verschil ~0.045).
 Public 0.274 ligt dicht bij de CV; de private test wijkt bij iedereen sterk af van public (bekende shake-up in deze competitie).
+
+## Briefing van de zusterrepo (hms-brain-activity, door Ward aangeleverd 17-11; hun cijfers zijn NIET door mij gemeten)
+Hun resultaten: E11 (B0 op Kaggle-spec) public 0.401 / private 0.470; E11b (+ B0 op raw-EEG-beeld, gelijk gemiddelde) 0.310 / 0.366.
+Hun conclusies die mijn metingen bevestigen: fusie van complementaire invoer is de grootste winst (hun fold 0: 0.733/0.403 spec,
+0.646/0.326 raw EEG, 0.610/0.297 fusie; mijn E4-E15: zelfde patroon); stap 2 op veel-stem-rijen verlaagt ≥10 maar verhoogt "all"
+(ook bij mij); kalibratie/temperatuur zit onder de ruis (hun 0.0057, mijn 0.0013).
+Hun open ideeën, voor zover ik ze al gemeten heb: band 20 Hz tegenover 40 Hz voor raw EEG = E11-E13 (20 Hz .361 vs 40 Hz .367 op
+≥6, ruis); 1D-netwerk i.p.v. beeld: E2 (.436 alleen) en E15 (1D-tak in de fusie: ≥6 .298 -> .299, "all" .629 -> .602);
+fusiegewichten buiten gelijk: E29 (gewogen .2569 vs gelijk .2571, ruis); fusie op 5 folds: E16 (.565/.278/.275); SWA: niet gemeten (EMA wel).
+Stap-2-drempel ≥6 vs ≥10: bij ons praktisch hetzelfde (slechts 114 van 17 089 eeg_id's hebben 6-9 stemmen), dus geen experiment waard.
+
+Run-to-run ruis op dezelfde fold (A vs A2, zelfde folds, andere seed, ≥10): f0 .279 / .274, f1 .241 / .245, f2 .287 / .289,
+f3 .257 / .263, f4 .259 / .258: verschil ≤ 0.006 (A met 3 decimalen). Veel kleiner dan de 0.035 / 0.054 uit de zusterrepo
+(waarschijnlijk andere schema's en minder trainingsdata per run: niet gemeten). Praktische drempel bij ons: ~0.008 op één fold.
