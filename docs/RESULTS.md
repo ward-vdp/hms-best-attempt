@@ -186,3 +186,8 @@ Stap-2-drempel ≥6 vs ≥10: bij ons praktisch hetzelfde (slechts 114 van 17 08
 Run-to-run ruis op dezelfde fold (A vs A2, zelfde folds, andere seed, ≥10): f0 .279 / .274, f1 .241 / .245, f2 .287 / .289,
 f3 .257 / .263, f4 .259 / .258: verschil ≤ 0.006 (A met 3 decimalen). Veel kleiner dan de 0.035 / 0.054 uit de zusterrepo
 (waarschijnlijk andere schema's en minder trainingsdata per run: niet gemeten). Praktische drempel bij ons: ~0.008 op één fold.
+
+## Job 17, eerste poging (Version 15): mislukt
+Alle 5 runs van D (4-takken-fusie, batch 64) crashten direct met CUDA out of memory op de T4 (14.6 GiB). Kostte ~11 min GPU.
+Het notebook meldde toch "Successful": de bash-cel geeft geen foutcode door. Opgelost: batch 32 en een expliciete controle
+(FOUT + exit als niet alle 5 folds een oof.csv hebben). Opnieuw gestart als Version 16.

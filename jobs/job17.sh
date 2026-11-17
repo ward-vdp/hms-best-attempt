@@ -1,4 +1,4 @@
-# Job 17 (background, ~2h15): 4th fusion branch = the Kaggle 10-minute spectrogram, i.e. information the 50 s EEG branches
+# Job 17 (background, ~2h30; rerun as Version 16 after an out-of-memory crash in Version 15): 4th fusion branch = the Kaggle 10-minute spectrogram, i.e. information the 50 s EEG branches
 # do not see (how the pattern evolves). Model D = fusion [eegspec B0, eeg1d, eegimg B0, spec B0 (10 min)], 5-fold, teacher
 # labels in stage 1 (pair teachers from the notebook-output input), same folds as A/A2/B (seed 42). The fold*.pt weights are
 # KEPT, so the 5 models can go straight into a submission. Then blend with whichever oof_A/A2/B files the mounted input has.
@@ -23,9 +23,13 @@ stud() { # gpu name fold model extra...
   local gpu=$1 name=$2 f=$3 m=$4; shift 4
   CUDA_VISIBLE_DEVICES=$gpu python -u -m hmsbest.train --config configs/spec_b0.yaml --set name=${name}_f$f data_root=$D cache_dir=$C "run_folds=[$f]" num_workers=2 "$m" eeg_hi=40.0 $T "teacher_csv=$RP/pair_*/rows_for${f}_*.csv" "$STT" "$@" > /kaggle/working/logs/${name}_f$f.txt 2>&1
 }
-( stud 0 D 0 "$MD"; stud 0 D 2 "$MD"; stud 0 D 4 "$MD" ) &
-( stud 1 D 1 "$MD"; stud 1 D 3 "$MD" ) &
+# batch 32: with 4 B0 branches batch 64 ran out of memory on a T4 (Version 15, 14.6 GiB); B2 fusion also used 32
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+( stud 0 D 0 "$MD" batch_size=32; stud 0 D 2 "$MD" batch_size=32; stud 0 D 4 "$MD" batch_size=32 ) &
+( stud 1 D 1 "$MD" batch_size=32; stud 1 D 3 "$MD" batch_size=32 ) &
 progress; wait
+N=$(ls /kaggle/working/runs/D_f*/oof.csv 2>/dev/null | wc -l)
+[ "$N" = "5" ] || { echo "FOUT: slechts $N van 5 folds klaar"; for f in /kaggle/working/logs/D_f*.txt; do echo "== $f"; tail -n 3 $f | cut -c1-300; done; exit 1; }
 cut -c1-130 /kaggle/working/results.csv
 K=/kaggle/working/keep; mkdir -p $K
 python - <<'PY'
