@@ -70,7 +70,7 @@ Budget: Kaggle 30 GPU-uur/week (reset in het weekend), na vanavond ~9 u verbruik
 Kaggle-notebooks van deze sandbox (titels met prefix CLAUDE, zodat ze niet te verwarren zijn met Wards eigen notebooks):
 - `CLAUDE hms-best-attempt train (runner)` (was notebookfa1e2f980e): runner, `jobs/current.sh` via git pull, internet aan, GPU T4 x2.
 - `CLAUDE hms-best-attempt submit (offline)` (was notebook5b5f4baa99): `notebooks/submit.ipynb`, internet uit.
-- (gepland) `CLAUDE hms-best-attempt weights`: `notebooks/weights_store.ipynb`, CPU; kopieert runs uit een andere versie van de runner.
+- `CLAUDE hms-best-attempt weights + cv-check` (aangemaakt 18/11, nog niet gedraaid): `notebooks/weights_store.ipynb`, CPU; kopieert runs uit een andere versie van de runner en draait `hmsbest.cvdef`.
 Reden voor dat derde notebook: een notebook-output als input is aan één versie vastgepind (menu: alleen "Check for updates"
 of "Remove"), dus FA/FB (versie 14) en D (versie 15) kunnen niet via hetzelfde notebook binnenkomen.
 
