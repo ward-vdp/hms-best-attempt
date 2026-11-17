@@ -281,3 +281,22 @@ def test_full_fit_and_infer_matches_training_path(fake_root, cache, tmp_path):
                 float(q["spectrogram_label_offset_seconds"]))
     got = predict(len(recs), load, [(c, models, 1.0)], torch.device("cpu"), bs=4)
     assert np.abs(got - ref[[col for col in ref.columns if col.startswith("pred_")]].to_numpy()).max() < 2e-2
+
+
+def test_cvdef_scores_agree_when_one_window_per_eeg():
+    """With one window per eeg_id the three CV definitions must coincide; with extra windows they may differ."""
+    from hmsbest.constants import VOTE_COLS
+    from hmsbest.cvdef import PC, scores
+    rng = np.random.default_rng(0)
+    rows = []
+    for e in range(40):
+        rows.append(dict(eeg_id=e, label_id=e, **dict(zip(VOTE_COLS, rng.multinomial(12, np.ones(6) / 6)))))
+    tr = pd.DataFrame(rows)
+    p = rng.dirichlet(np.ones(6), size=40)
+    preds = pd.DataFrame(p, columns=PC); preds.insert(0, "label_id", np.arange(40))
+    s = scores(tr, preds, 10)
+    assert s["n_eeg"] == 40 and abs(s["ours"] - s["sony"]) < 1e-9 and abs(s["ours"] - s["mixed"]) < 1e-9
+    extra = tr.copy(); extra["label_id"] += 100; extra[VOTE_COLS] = rng.multinomial(3, np.ones(6) / 6, size=40)
+    p2 = preds.copy(); p2["label_id"] += 100
+    s2 = scores(pd.concat([tr, extra]), pd.concat([preds, p2]), 10)
+    assert s2["n_eeg"] == 40 and abs(s2["ours"] - s["ours"]) < 1e-9      # extra low-vote windows do not change "ours"
