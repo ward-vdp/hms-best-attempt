@@ -191,3 +191,23 @@ f3 .257 / .263, f4 .259 / .258: verschil ≤ 0.006 (A met 3 decimalen). Veel kle
 Alle 5 runs van D (4-takken-fusie, batch 64) crashten direct met CUDA out of memory op de T4 (14.6 GiB). Kostte ~11 min GPU.
 Het notebook meldde toch "Successful": de bash-cel geeft geen foutcode door. Opgelost: batch 32 en een expliciete controle
 (FOUT + exit als niet alle 5 folds een oof.csv hebben). Opnieuw gestart als Version 16.
+
+## Job 17 (Kaggle Version 16): D = 4-takken-fusie met het 10-minuten Kaggle-spectrogram, 5-fold, batch 32 (9 847 s ≈ 2.7 GPU-u)
+| model | KL all | KL ≥6 | KL ≥10 | per fold ≥10 |
+|---|---|---|---|---|
+| A (B0, 3 takken) | 0.566 | 0.268 | 0.266 | .279 .241 .287 .257 .259 |
+| B (B2, 3 takken) | 0.560 | 0.265 | 0.263 | .277 .240 .279 .256 .256 |
+| **D (B0, 4 takken incl. 10-min spec)** | **0.551** | **0.262** | **0.260** | .275 .245 .272 .252 .251 |
+D is het beste losse model; t.o.v. A (zelfde backbone, zelfde folds) beter in 4 van 5 folds (gemiddeld −0.006, ≈ 1.5× seed-ruis per fold).
+De 10-minuten-context levert dus informatie die de 50 s-takken niet hebben, maar LRDA blijft het zwakst (KL dominant 0.384).
+
+Blend (job-log had alleen A + D: 0.5474 / 0.2579 / 0.2553). Volledige blend met A2 en B: OOF-bestanden van Version 13 en 16 in de
+browser ingelezen en met dezelfde KL-definitie herberekend (controle: A .2657, D .2597, gelijk A+A2+B .2571 exact gereproduceerd);
+gewichten op een simplexrooster (stap 0.1), gefit op ≥10-rijen van de andere folds:
+| ensemble | KL all | KL ≥6 | KL ≥10 | per fold ≥10 |
+|---|---|---|---|---|
+| A+A2+B, cross-fitted | 0.554 | 0.260 | 0.2571 | .270 .235 .276 .251 .250 |
+| A+A2+B+D, gelijk | 0.548 | 0.256 | 0.2536 | |
+| **A+A2+B+D, cross-fitted** | **0.545** | **0.255** | **0.2528** | .267 .234 .268 .246 .245 |
+Winst −0.0043 ≥ drempel 0.003 (docs/PLAN.md) en in alle 5 folds -> D gaat in de inzending.
+Gewichten op alle ≥10-rijen (stap 0.05): A 0.15, A2 0.10, B 0.30, D 0.45 -> inzending FA 0.25, FB 0.30, D 0.45.
