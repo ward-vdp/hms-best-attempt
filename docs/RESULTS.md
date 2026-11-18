@@ -211,3 +211,14 @@ gewichten op een simplexrooster (stap 0.1), gefit op ≥10-rijen van de andere f
 | **A+A2+B+D, cross-fitted** | **0.545** | **0.255** | **0.2528** | .267 .234 .268 .246 .245 |
 Winst −0.0043 ≥ drempel 0.003 (docs/PLAN.md) en in alle 5 folds -> D gaat in de inzending.
 Gewichten op alle ≥10-rijen (stap 0.05): A 0.15, A2 0.10, B 0.30, D 0.45 -> inzending FA 0.25, FB 0.30, D 0.45.
+
+## CV-definitie-diagnose (`hmsbest/cvdef.py`, CPU-notebook "CLAUDE hms-best-attempt weights + cv-check", 18/11)
+Zelfde out-of-fold rijvoorspellingen (gemiddelde van de 4 paar-teachers per rij, alle 106 800 rijen), drie scoringswijzen:
+| populatie | ours (venster met meeste stemmen) | sony (stemmen per eeg_id opgeteld, voorspelling gemiddeld) | mixed |
+|---|---|---|---|
+| ≥10 stemmen (5 939 eeg_id's) | 0.2698 | 0.2563 | 0.2727 |
+| alle (17 089) | 0.5602 | 0.5417 | 0.5634 |
+Conclusie: de definitie van de 1e plaats geeft voor dezelfde voorspellingen ~0.013 LAGER op ≥10. Onze CV is dus niet
+optimistisch t.o.v. de hunne maar pessimistisch. Grove omzetting van ons ensemble (0.2528) naar hun definitie: ≈ 0.24
+(offset gemeten op teacher-voorspellingen, niet op de blend zelf: niet exact gemeten). Gevolg: het gat CV -> private is bij ons
+groter (≈ 0.24 -> 0.317) dan bij hen (≈ 0.22-0.23 -> 0.272); de CV-definitie verklaart het gat dus niet. Oorzaak: niet gemeten.
