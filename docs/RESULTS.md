@@ -222,3 +222,15 @@ Conclusie: de definitie van de 1e plaats geeft voor dezelfde voorspellingen ~0.0
 optimistisch t.o.v. de hunne maar pessimistisch. Grove omzetting van ons ensemble (0.2528) naar hun definitie: ≈ 0.24
 (offset gemeten op teacher-voorspellingen, niet op de blend zelf: niet exact gemeten). Gevolg: het gat CV -> private is bij ons
 groter (≈ 0.24 -> 0.317) dan bij hen (≈ 0.22-0.23 -> 0.272); de CV-definitie verklaart het gat dus niet. Oorzaak: niet gemeten.
+
+## Job 18 (runner Version 17) en tweede late submission (submit Version 3), 18/11
+Job 18: FA/FB stonden niet in de input (die wees naar Version 16) en werden opnieuw getraind zoals in job 16 (7 182 s).
+Controle op 400 trainvensters: KL 0.1638, exact gelijk aan Version 14 -> de training is deterministisch reproduceerbaar.
+Submit Version 3: FB 2 x 0.30 + FA 2 x 0.25 (runner Version 17) + D 5 x 0.45 (weights-notebook Version 1), 199.6 s op de zichtbare test.
+
+| inzending | CV ≥10 (5-fold-analoog) | public | private | positie private LB (afgelezen, telt niet mee) |
+|---|---|---|---|---|
+| Version 1 (13/11): FA+FB | 0.2569 | 0.273757 | 0.316473 | ~34 |
+| **Version 3 (18/11): FA+FB+D** | **0.2528** | **0.271815** | **0.314345** | ~31 (30e .3137, 31e .3151) |
+Verschil: CV −0.0041, public −0.0019, private −0.0021: zelfde richting, ongeveer half zo groot op de testset.
+Gekozen op CV volgens de vooraf vastgelegde regel (docs/PLAN.md); er is geen andere inzending als vergelijking op private gekozen.
