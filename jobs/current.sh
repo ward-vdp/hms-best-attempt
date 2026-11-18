@@ -1,55 +1,23 @@
-# Job 17 (background, ~2h30; rerun as Version 16 after an out-of-memory crash in Version 15): 4th fusion branch = the Kaggle 10-minute spectrogram, i.e. information the 50 s EEG branches
-# do not see (how the pattern evolves). Model D = fusion [eegspec B0, eeg1d, eegimg B0, spec B0 (10 min)], 5-fold, teacher
-# labels in stage 1 (pair teachers from the notebook-output input), same folds as A/A2/B (seed 42). The fold*.pt weights are
-# KEPT, so the 5 models can go straight into a submission. Then blend with whichever oof_A/A2/B files the mounted input has.
+# Job 18: make the LATEST version of the runner hold FA and FB (full-fit, job 16), because a notebook-output input always
+# resolves to the latest version of that notebook (Version 2 of the submit notebook failed: the runner input was Version 16,
+# which has D but not FA/FB). D keeps coming from the "weights + cv-check" notebook (its Version 1).
+# Copy FA/FB if the mounted input has them (minutes); otherwise retrain them exactly as in job 16 (~2 h).
 export PYTHONPATH=/kaggle/working/repo
-D=$(dirname "$(find /kaggle/input -maxdepth 4 -name train.csv | head -1)")
-C=/kaggle/temp/cache
-mkdir -p /kaggle/working/logs
-python -m hmsbest.prep --data_root $D --cache_dir $C --workers 4 2>&1 | grep -v -i warn | tail -n 2
-IN=$(dirname "$(find /kaggle/input -name oof_teacher5.csv | head -1)")
-RP=$IN/runs
-echo "teacher input: $IN  ($(ls $RP/pair_*/rows_for*.csv 2>/dev/null | wc -l) row files)"
-find /kaggle/input -name 'oof_*.csv' | head
-[ "$(ls $RP/pair_*/rows_for*.csv 2>/dev/null | wc -l)" = "20" ] || { echo "FOUT: paar-teacher-bestanden niet gevonden"; exit 1; }
-T='label_smooth=0.02 shift_s=5.0 target_mean_w=0.5 label_prior=global'
-SP='{kind: eegspec, backbone: efficientnet_b0, pretrained: true, mask: 2}'
-IM='{kind: eegimg, backbone: efficientnet_b0, pretrained: true}'
-KS='{kind: spec, backbone: efficientnet_b0, pretrained: true, mask: 2}'
-MD="model={kind: fusion, parts: [$SP, {kind: eeg1d}, $IM, $KS]}"
-STT='stages=[{epochs: 6, lr: 1.0e-3, min_votes: 0, weight: votes}, {epochs: 3, lr: 1.0e-4, min_votes: 6, weight: none, teacher_tau: 0}]'
-progress() { sleep 45; while pgrep -f hmsbest.train > /dev/null; do sleep 180; echo "--- $(date +%H:%M)"; for f in /kaggle/working/logs/*.txt; do echo "$(basename $f) $(grep -h '^\[f' $f | tail -n 1)"; done; done; }
-stud() { # gpu name fold model extra...
-  local gpu=$1 name=$2 f=$3 m=$4; shift 4
-  CUDA_VISIBLE_DEVICES=$gpu python -u -m hmsbest.train --config configs/spec_b0.yaml --set name=${name}_f$f data_root=$D cache_dir=$C "run_folds=[$f]" num_workers=2 "$m" eeg_hi=40.0 $T "teacher_csv=$RP/pair_*/rows_for${f}_*.csv" "$STT" "$@" > /kaggle/working/logs/${name}_f$f.txt 2>&1
-}
-# batch 32: with 4 B0 branches batch 64 ran out of memory on a T4 (Version 15, 14.6 GiB); B2 fusion also used 32
-export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-( stud 0 D 0 "$MD" batch_size=32; stud 0 D 2 "$MD" batch_size=32; stud 0 D 4 "$MD" batch_size=32 ) &
-( stud 1 D 1 "$MD" batch_size=32; stud 1 D 3 "$MD" batch_size=32 ) &
-progress; wait
-N=$(ls /kaggle/working/runs/D_f*/oof.csv 2>/dev/null | wc -l)
-[ "$N" = "5" ] || { echo "FOUT: slechts $N van 5 folds klaar"; for f in /kaggle/working/logs/D_f*.txt; do echo "== $f"; tail -n 3 $f | cut -c1-300; done; exit 1; }
-cut -c1-130 /kaggle/working/results.csv
-K=/kaggle/working/keep; mkdir -p $K
-python - <<'PY'
-import pandas as pd
-pd.concat([pd.read_csv(f"/kaggle/working/runs/D_f{f}/oof.csv") for f in range(5)], ignore_index=True).to_csv("/kaggle/working/keep/oof_D.csv", index=False)
-PY
-# the 5 fold models in ONE directory (infer.py averages every fold*.pt of an experiment directory)
-mkdir -p /kaggle/working/runs/D; for f in 0 1 2 3 4; do cp /kaggle/working/runs/D_f$f/fold$f.pt /kaggle/working/runs/D/; done
-cp /kaggle/working/runs/D_f0/config.yaml /kaggle/working/runs/D/config.yaml
-# blend with whatever is available (A = oof_teacher5.csv, A2/B from the version-13 output if that is what is mounted)
-ARGS=""
-PA=$(find /kaggle/input -name oof_A.csv | head -1); [ -z "$PA" ] && PA=$(find /kaggle/input -name oof_teacher5.csv | head -1)   # same file (A)
-ARGS="$PA"
-for n in oof_A2.csv oof_B.csv; do p=$(find /kaggle/input -name $n | head -1); [ -n "$p" ] && ARGS="$ARGS $p"; done
-echo "blend inputs:$ARGS $K/oof_D.csv"
-python -m hmsbest.blend $ARGS $K/oof_D.csv --out $K/oof_blend.csv
-python -m hmsbest.analyze $K/oof_blend.csv
-# carry the teacher predictions forward so later versions can keep using this notebook's output as input
-cp $IN/oof_teacher5.csv /kaggle/working/oof_teacher5.csv
-for d in $RP/pair_*/; do mkdir -p /kaggle/working/runs/$(basename $d); cp $d/rows_for*.csv /kaggle/working/runs/$(basename $d)/; done
-for f in /kaggle/working/logs/*.txt; do echo "== $f"; tail -n 2 $f | cut -c1-200; done
-rm -rf /kaggle/working/runs/D_f*/fold*.pt
+mkdir -p /kaggle/working/runs
+FA=$(dirname "$(find /kaggle/input -path '*runs/FA/config.yaml' | head -1)")
+FB=$(dirname "$(find /kaggle/input -path '*runs/FB/config.yaml' | head -1)")
+echo "found FA: $FA ($(ls $FA/fold*.pt 2>/dev/null | wc -l) models)  FB: $FB ($(ls $FB/fold*.pt 2>/dev/null | wc -l) models)"
+if [ "$(ls $FA/fold*.pt 2>/dev/null | wc -l)" = "2" ] && [ "$(ls $FB/fold*.pt 2>/dev/null | wc -l)" = "2" ]; then
+  cp -r $FA /kaggle/working/runs/FA; cp -r $FB /kaggle/working/runs/FB
+  IN=$(dirname "$(find /kaggle/input -name oof_teacher5.csv | head -1)")
+  cp $IN/oof_teacher5.csv /kaggle/working/ 2>/dev/null
+  for d in $IN/runs/pair_*/; do mkdir -p /kaggle/working/runs/$(basename $d); cp $d/rows_for*.csv /kaggle/working/runs/$(basename $d)/; done
+  echo "copied FA/FB from the input"
+else
+  echo "FA/FB not in the input: retraining them (job 16)"
+  bash jobs/job16.sh
+fi
+ls -la /kaggle/working/runs/FA /kaggle/working/runs/FB
+N=$(ls /kaggle/working/runs/FA/fold*.pt /kaggle/working/runs/FB/fold*.pt 2>/dev/null | wc -l)
+[ "$N" = "4" ] || { echo "FOUT: $N van 4 FA/FB-modellen"; exit 1; }
 du -sh /kaggle/working/*
