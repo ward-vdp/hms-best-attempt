@@ -71,8 +71,12 @@ Kaggle-notebooks van deze sandbox (titels met prefix CLAUDE, zodat ze niet te ve
 - `CLAUDE hms-best-attempt train (runner)` (was notebookfa1e2f980e): runner, `jobs/current.sh` via git pull, internet aan, GPU T4 x2.
 - `CLAUDE hms-best-attempt submit (offline)` (was notebook5b5f4baa99): `notebooks/submit.ipynb`, internet uit.
 - `CLAUDE hms-best-attempt weights + cv-check` (aangemaakt 18/11, nog niet gedraaid): `notebooks/weights_store.ipynb`, CPU; kopieert runs uit een andere versie van de runner en draait `hmsbest.cvdef`.
-Reden voor dat derde notebook: een notebook-output als input is aan één versie vastgepind (menu: alleen "Check for updates"
-of "Remove"), dus FA/FB (versie 14) en D (versie 15) kunnen niet via hetzelfde notebook binnenkomen.
+Reden voor dat derde notebook: een notebook-output als input wijst naar één versie van dat notebook (menu: alleen
+"Check for updates" of "Remove"), dus FA/FB (versie 14) en D (versie 16) kunnen niet via hetzelfde notebook binnenkomen.
+Correctie 18/11: die input blijft NIET vastgepind op de versie van het moment van koppelen. Bij het opnieuw openen/opslaan
+pakte het submit-notebook de nieuwste versie (16), waardoor FA/FB ontbraken (submit Version 2 faalde, IndexError).
+Oplossing: de nieuwste runner-versie moet zelf FA/FB bevatten (job 18: kopiëren uit de input of opnieuw trainen),
+D komt uit "weights + cv-check" (Version 1, niet opnieuw draaien).
 
 Beslisregels (vooraf vastgelegd, zodat de keuze niet op de private score gebeurt):
 1. D gaat in de inzending als de gecross-fitte blend met D op >= 10 minstens 0.003 beter is dan A+A2+B (0.2569).
