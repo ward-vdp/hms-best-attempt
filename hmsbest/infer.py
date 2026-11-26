@@ -66,12 +66,14 @@ def predict(n, load, exps, dev, bs=32):
         cache = {}              # experiments may use different EEG filters / spectrogram crops
         for cfg, models, w in exps:
             hi, lo = float(cfg.get("eeg_hi", 40.0)), (0.5 if cfg.get("filt", True) else None)
+            ck, sc = float(cfg.get("eeg_clip", 500.0)), float(cfg.get("eeg_scale", 50.0))
             nr = int(cfg.get("spec_rows", 300))
-            if (hi, lo) not in cache:
-                cache[(hi, lo)] = torch.from_numpy(np.stack([eeg_window(e, eo, lo=lo, hi=hi) for e, eo, _, _ in chunk])).to(dev)
+            if (hi, lo, ck, sc) not in cache:
+                cache[(hi, lo, ck, sc)] = torch.from_numpy(np.stack([eeg_window(e, eo, lo=lo, hi=hi, clip=ck, scale=sc)
+                                                                     for e, eo, _, _ in chunk])).to(dev)
             if nr not in cache:
                 cache[nr] = torch.from_numpy(np.stack([spec_window(sp, so, nr) for _, _, sp, so in chunk])).to(dev)
-            batch = dict(eeg=cache[(hi, lo)], spec=cache[nr])
+            batch = dict(eeg=cache[(hi, lo, ck, sc)], spec=cache[nr])
             out[s:s + len(chunk)] += w / wsum * predict_batch(models, batch, cfg.get("tta", True)).cpu().numpy()
     return out / out.sum(1, keepdims=True)
 

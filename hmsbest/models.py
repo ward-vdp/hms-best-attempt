@@ -21,6 +21,16 @@ def eeg_image(eeg):
     return (x - x.mean(dim=(1, 2, 3), keepdim=True)) / (x.std(dim=(1, 2, 3), keepdim=True) + 1e-4)
 
 
+def eeg_image_poly(eeg):
+    """(B, 16, 10000) -> (B, 1, 160, 1000) as in the 2nd-place HMS solution: row k of channel c holds samples
+    k, k+10, k+20, ... (polyphase), so every row spans the full 50 s and rows of all 16 channels are time-aligned in
+    the same columns. Amplitude is kept (no per-sample standardisation; eeg_window already clips and scales).
+    The earlier eeg_image cut each channel into ten consecutive 5 s pieces instead (time-discontinuous rows) and
+    removed the absolute amplitude."""
+    b = eeg.shape[0]
+    return eeg.reshape(b, 16, 1000, 10).permute(0, 1, 3, 2).reshape(b, 1, 160, 1000)
+
+
 class LearnableScalogram(nn.Module):
     """Differentiable wavelet front-end: a bank of complex Morlet filters (shared over the 16 bipolar channels) whose
     weights are initialised as a CWT and then trained end-to-end. Output: log-power scalogram per channel, channels
@@ -73,6 +83,8 @@ class ImageNet(nn.Module):
     def image(self, batch):
         if self.source == "eegimg":
             return eeg_image(batch["eeg"])
+        if self.source == "eegimg2":
+            return eeg_image_poly(batch["eeg"])
         if self.source == "eegcwt":
             x = self.scal(batch["eeg"])
             return spec_mask(x, self.mask) if (self.training and self.mask) else x
@@ -171,7 +183,7 @@ class Fusion(nn.Module):
 
 def build_model(cfg: dict) -> nn.Module:
     kind = cfg["kind"]
-    if kind in ("spec", "eegspec", "eegimg", "eegcwt"):
+    if kind in ("spec", "eegspec", "eegimg", "eegimg2", "eegcwt"):
         return ImageNet(kind, cfg.get("backbone", "efficientnet_b0"), cfg.get("pretrained", True),
                         cfg.get("drop", 0.3), cfg.get("drop_path", 0.1), cfg.get("mask", 0),
                         cfg.get("siamese", False))

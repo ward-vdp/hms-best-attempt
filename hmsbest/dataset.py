@@ -11,11 +11,12 @@ from .signal import eeg_window, spec_window
 class HMSDataset(Dataset):
     def __init__(self, rows: pd.DataFrame, cache_dir: str, mode: str = "train",
                  min_votes: int = 0, spec_rows: int = 300, filt: bool = True, eeg_hi: float = 40.0,
+                 eeg_clip: float = 500.0, eeg_scale: float = 50.0,
                  target_mean_w: float = 0.0, label_smooth: float = 0.0, shift_s: float = 0.0,
                  label_prior: str = "uniform", teacher_tau: float = 0.0):
         assert mode in ("train", "eval")
         self.cache, self.mode, self.spec_rows, self.filt = cache_dir, mode, spec_rows, filt
-        self.eeg_hi = eeg_hi
+        self.eeg_hi, self.eeg_clip, self.eeg_scale = eeg_hi, eeg_clip, eeg_scale
         self.tw = target_mean_w if mode == "train" else 0.0   # train only: blend window label with the eeg_id-mean label
         # train only: +label_smooth to every vote BEFORE normalising (low-vote labels get smoothed more; Team Sony)
         self.ls = label_smooth if mode == "train" else 0.0
@@ -64,7 +65,8 @@ class HMSDataset(Dataset):
             nc = len(TARGET_COLS)
             y = (y * n + self.ls * nc * self.prior) / (n + nc * self.ls)
         return dict(
-            eeg=torch.from_numpy(eeg_window(eeg, off, lo=0.5 if self.filt else None, hi=self.eeg_hi)),
+            eeg=torch.from_numpy(eeg_window(eeg, off, lo=0.5 if self.filt else None, hi=self.eeg_hi,
+                                            clip=self.eeg_clip, scale=self.eeg_scale)),
             spec=torch.from_numpy(spec_window(spec, g["spec_off"][k], self.spec_rows)),
             y=torch.from_numpy(y.astype(np.float32)),
             n=torch.tensor(float(n)),
@@ -74,9 +76,10 @@ class HMSDataset(Dataset):
 class RowDataset(Dataset):
     """Every labelled window (row of train.csv) once, for writing per-row teacher predictions."""
 
-    def __init__(self, rows, cache_dir, spec_rows=300, filt=True, eeg_hi=40.0):
+    def __init__(self, rows, cache_dir, spec_rows=300, filt=True, eeg_hi=40.0, eeg_clip=500.0, eeg_scale=50.0):
         self.r = rows.reset_index(drop=True)
         self.cache, self.spec_rows, self.filt, self.eeg_hi = cache_dir, spec_rows, filt, eeg_hi
+        self.eeg_clip, self.eeg_scale = eeg_clip, eeg_scale
 
     def __len__(self):
         return len(self.r)
@@ -86,6 +89,7 @@ class RowDataset(Dataset):
         eeg = np.load(f"{self.cache}/eeg/{int(r.eeg_id)}.npy", mmap_mode="r")
         spec = np.load(f"{self.cache}/spec/{int(r.spectrogram_id)}.npy", mmap_mode="r")
         return dict(
-            eeg=torch.from_numpy(eeg_window(eeg, float(r.eeg_label_offset_seconds), lo=0.5 if self.filt else None, hi=self.eeg_hi)),
+            eeg=torch.from_numpy(eeg_window(eeg, float(r.eeg_label_offset_seconds), lo=0.5 if self.filt else None, hi=self.eeg_hi,
+                                            clip=self.eeg_clip, scale=self.eeg_scale)),
             spec=torch.from_numpy(spec_window(spec, float(r.spectrogram_label_offset_seconds), self.spec_rows)),
             label_id=int(r.label_id))

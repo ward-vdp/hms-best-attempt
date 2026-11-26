@@ -117,7 +117,7 @@ def run_fold(cfg, df, fold, dev, out_dir, df_excl=None):
     if cfg.get("full_fit"):                     # final model: train on everything; 'va' is then only an in-sample monitor
         tr = df
     dkw = dict(cache_dir=cfg["cache_dir"], spec_rows=cfg.get("spec_rows", 300), filt=cfg.get("filt", True),
-               eeg_hi=cfg.get("eeg_hi", 40.0))
+               eeg_hi=cfg.get("eeg_hi", 40.0), eeg_clip=cfg.get("eeg_clip", 500.0), eeg_scale=cfg.get("eeg_scale", 50.0))
     val_ds = HMSDataset(va, mode="eval", **dkw)
     nw = cfg.get("num_workers", 4)
     val_loader = DataLoader(val_ds, batch_size=cfg["batch_size"] * 2, num_workers=nw)

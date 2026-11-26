@@ -300,3 +300,43 @@ def test_cvdef_scores_agree_when_one_window_per_eeg():
     p2 = preds.copy(); p2["label_id"] += 100
     s2 = scores(pd.concat([tr, extra]), pd.concat([preds, p2]), 10)
     assert s2["n_eeg"] == 40 and abs(s2["ours"] - s["ours"]) < 1e-9      # extra low-vote windows do not change "ours"
+
+
+def test_eeg_image_poly_layout():
+    """Polyphase layout: row k of channel c = samples k, k+10, ... of that channel (full 50 s per row)."""
+    from hmsbest.models import eeg_image_poly
+    x = torch.arange(2 * 16 * 10000, dtype=torch.float32).reshape(2, 16, 10000)
+    im = eeg_image_poly(x)
+    assert im.shape == (2, 1, 160, 1000)
+    for c, k in [(0, 0), (3, 7), (15, 9)]:
+        assert torch.equal(im[1, 0, c * 10 + k], x[1, c, k::10])
+
+
+def test_full_fit_infer_eegimg2_clip_scale(fake_root, cache, tmp_path):
+    """eegimg2 with non-default eeg_clip/eeg_scale/eeg_hi: inference from raw parquet == training-time row predictions."""
+    from hmsbest.data import load_train_meta
+    from hmsbest.infer import load_models, predict
+    from hmsbest.signal import eeg_bipolar, spec_log
+    from hmsbest.train import predict_rows
+    m = dict(kind="eegimg2", backbone="efficientnet_b0", pretrained=False, drop=0.5)
+    cfg = dict(name="e2", seed=1, folds=3, run_folds=[0], full_fit=True, data_root=str(fake_root), cache_dir=str(cache),
+               out_dir=str(tmp_path / "runs"), results_csv=str(tmp_path / "results.csv"), batch_size=4, num_workers=0,
+               limit_eegs=8, max_steps=2, ema=0.9, model=m, aug=dict(mirror=True), eeg_hi=20.0, eeg_clip=1024.0,
+               eeg_scale=100.0, stages=[dict(epochs=1, lr=1e-3, min_votes=0, weight="votes")])
+    p = tmp_path / "c.yaml"; p.write_text(yaml.safe_dump(cfg))
+    subprocess.run([sys.executable, "-m", "hmsbest.train", "--config", str(p)], check=True)
+    exp = tmp_path / "runs" / "e2"
+    c, models = load_models(str(exp), torch.device("cpu"))
+    rows = load_train_meta(str(fake_root / "train.csv")).head(6)
+    ref = predict_rows(models[0], rows, dict(batch_size=4, num_workers=0),
+                       dict(cache_dir=str(cache), spec_rows=300, filt=True, eeg_hi=20.0, eeg_clip=1024.0, eeg_scale=100.0),
+                       torch.device("cpu"))
+    recs = rows.to_dict("records")
+
+    def load(i):
+        q = recs[i]
+        return (eeg_bipolar(pd.read_parquet(fake_root / "train_eegs" / f"{q['eeg_id']}.parquet")), float(q["eeg_label_offset_seconds"]),
+                spec_log(pd.read_parquet(fake_root / "train_spectrograms" / f"{q['spectrogram_id']}.parquet")),
+                float(q["spectrogram_label_offset_seconds"]))
+    got = predict(len(recs), load, [(c, models, 1.0)], torch.device("cpu"), bs=4)
+    assert np.abs(got - ref[[col for col in ref.columns if col.startswith("pred_")]].to_numpy()).max() < 2e-2
