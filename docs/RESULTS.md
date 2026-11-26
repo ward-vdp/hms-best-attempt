@@ -234,3 +234,19 @@ Submit Version 3: FB 2 x 0.30 + FA 2 x 0.25 (runner Version 17) + D 5 x 0.45 (we
 | **Version 3 (18/11): FA+FB+D** | **0.2528** | **0.271815** | **0.314345** | ~31 (30e .3137, 31e .3151) |
 Verschil: CV −0.0041, public −0.0019, private −0.0021: zelfde richting, ongeveer half zo groot op de testset.
 Gekozen op CV volgens de vooraf vastgelegde regel (docs/PLAN.md); er is geen andere inzending als vergelijking op private gekozen.
+
+## Eindspurt naar private < 0.300 (26/11)
+Doel van Ward: private < 0.300 (nu 0.3143). Benodigd ≈ −0.015 private; met de gemeten overdracht (CV-winst ≈ 2× private-winst)
+betekent dat CV ≥10 rond 0.235-0.24 (nu 0.2528).
+Bron: 2e plaats HMS (dev.to/zenn-samenvatting van Kaggle discussion 492254): het raw-EEG-beeldmodel alleen haalde
+public 0.231 / private 0.283 (EfficientNet-B5, 0.5-20 Hz, clip ±1024, 160x1000-beeld, 15+5 epochs, labels per eeg_id
+gemiddeld). Dat ene model is beter dan ons hele ensemble.
+**Fout gevonden in onze eegimg-tak** (sinds job 06): `eeg_image` knipte elk kanaal in 10 opeenvolgende stukken van 5 s
+(rijen niet tijd-continu, kanalen niet tijd-uitgelijnd) en standaardiseerde per voorbeeld (absolute amplitude weg).
+De 2e plaats gebruikt een polyfase-indeling: elke rij beslaat de volle 50 s, rijen van alle kanalen zijn tijd-uitgelijnd,
+amplitude in µV blijft. Verklaart waarom eegimg bij ons zwak was (E11-E13: ≥6 0.351-0.367 als los model).
+Hersteld als `eegimg2` (test: rij k van kanaal c = samples k, k+10, ...; infer == training ook met eeg_clip/eeg_scale).
+Gestart (26/11 ~21:30), parallel:
+- job 19 (runner Version 18): E = 2e-plaats-recept, B5, 5-fold, + onze teacher-labels; FA/FB doorgekopieerd.
+- job 20 ("CLAUDE hms-best-attempt train 2" Version 1): D' = D met eegimg2 i.p.v. eegimg (zuivere ablatie van de fix).
+GPU-quota vóór start: 2:29 / 30 u gebruikt.
