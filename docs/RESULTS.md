@@ -274,3 +274,14 @@ Correctie 27/11 12:30: geen Kaggle-storing. Ward diende dezelfde Version 4 in va
 Inzendingen vanuit de ingebouwde browser van de Claude-app falen sinds vandaag direct met "Kaggle Error" (en de notebook-
 editor blijft daar leeg); vermoedelijk Kaggles bot-detectie (reCAPTCHA op de inzendknop). Afspraak: Ward dient zelf in,
 de assistent zet klaar en leest uit.
+
+### Resultaat Version 4 (ingediend door Ward, 27/11)
+| inzending | CV ≥10 | public | private |
+|---|---|---|---|
+| V1 (full-fit B0+B2, 2 seeds) | – | 0.273757 | 0.316473 |
+| V3 (FA .25 + FB .30 + D .45) | .2528 | 0.271815 | 0.314345 |
+| **V4 (FA .05 + FB .10 + D .11 + D' .33 + E .43)** | **.2285** | **0.243798** | **0.289068** |
+Doel "private < 0.30" gehaald: −0.025 private t.o.v. V3 (CV-winst −0.024 → transfer hier ≈ volledig, niet de eerder aangenomen helft).
+Privé-leaderboard ter vergelijking (late inzending, geen rang): 1e .2723, 10e .2867, 13e .2886, 14e .2900, 15e .2908, 20e .3029
+-> 0.2891 komt overeen met ruwweg plaats 13-14. Aanzienlijk onder de 1e plaats blijft niet gehaald (+0.017).
+Volgende hefbomen (niet uitgevoerd): 2e seed van E en D', E full-fit, daarna herblenden (verwacht ≈ −0.003 tot −0.006 CV).
