@@ -267,3 +267,6 @@ Blend (OOF in de browser herberekend, coordinate descent op de simplex, gefit op
 | **A, A2, B, D, D', E cross-fitted** | **0.523** | **0.231** | **0.2285** | .246 .213 .232 .226 .223 |
 Gewichten per fold stabiel (E 0.37-0.45, D' 0.31-0.36). Op alle ≥10-rijen: A .02, A2 .03, B .10, D .11, D' .33, E .43
 -> inzending FA .05, FB .10, D .11, Dp .33, E .43.
+Submit-notebook Version 4 (19 modellen: FA 2, FB 2, D 5, Dp 5, E 5; 218 s op de zichtbare test) ingediend 27/11 ~11:20:
+direct "Kaggle Error" (systeemfout), ook bij herhaling, en ook een herindiening van de eerder geslaagde Version 3 faalde zo.
+Dus een probleem aan Kaggle-kant op dat moment; opnieuw proberen.
