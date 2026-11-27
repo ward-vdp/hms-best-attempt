@@ -250,3 +250,20 @@ Gestart (26/11 ~21:30), parallel:
 - job 19 (runner Version 18): E = 2e-plaats-recept, B5, 5-fold, + onze teacher-labels; FA/FB doorgekopieerd.
 - job 20 ("CLAUDE hms-best-attempt train 2" Version 1): D' = D met eegimg2 i.p.v. eegimg (zuivere ablatie van de fix).
 GPU-quota vóór start: 2:29 / 30 u gebruikt.
+
+### Resultaten job 19 (E) en job 20 (D'), 27/11
+| model | KL all | ≥6 | ≥10 | per fold ≥10 | GPU-tijd |
+|---|---|---|---|---|---|
+| D (oude eegimg) | 0.551 | 0.262 | 0.2597 | .275 .245 .272 .252 .251 | 2.7 u |
+| **D' (D met eegimg2)** | **0.515** | **0.244** | **0.2417** | .254 .223 .251 .238 .238 | 2.5 u |
+| **E (2e-plaats raw-EEG, B5)** | 0.571 | 0.246 | **0.2434** | .264 .226 .237 .243 .244 | 8.4 u |
+D' vs D: −0.018 op ≥10, beter in 5/5 folds: de eegimg-fout kostte ons dus veel. E is als los model even sterk, en zeer
+divers (andere voorbewerking, backbone, label-middeling). E is zwak op "all" (laag-stem-rijen), sterk op veel-stem-rijen.
+Blend (OOF in de browser herberekend, coordinate descent op de simplex, gefit op ≥10-rijen van de andere folds):
+| ensemble | all | ≥6 | ≥10 | per fold ≥10 |
+|---|---|---|---|---|
+| vorige inzending A+A2+B+D | 0.545 | 0.255 | 0.2528 | .267 .234 .268 .246 .245 |
+| D' + E gelijk | 0.526 | 0.234 | 0.2309 | .248 .215 .231 .230 .227 |
+| **A, A2, B, D, D', E cross-fitted** | **0.523** | **0.231** | **0.2285** | .246 .213 .232 .226 .223 |
+Gewichten per fold stabiel (E 0.37-0.45, D' 0.31-0.36). Op alle ≥10-rijen: A .02, A2 .03, B .10, D .11, D' .33, E .43
+-> inzending FA .05, FB .10, D .11, Dp .33, E .43.
