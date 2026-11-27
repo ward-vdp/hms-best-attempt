@@ -270,3 +270,7 @@ Gewichten per fold stabiel (E 0.37-0.45, D' 0.31-0.36). Op alle ≥10-rijen: A .
 Submit-notebook Version 4 (19 modellen: FA 2, FB 2, D 5, Dp 5, E 5; 218 s op de zichtbare test) ingediend 27/11 ~11:20:
 direct "Kaggle Error" (systeemfout), ook bij herhaling, en ook een herindiening van de eerder geslaagde Version 3 faalde zo.
 Dus een probleem aan Kaggle-kant op dat moment; opnieuw proberen.
+Correctie 27/11 12:30: geen Kaggle-storing. Ward diende dezelfde Version 4 in vanuit zijn eigen Chrome en dat werkte meteen.
+Inzendingen vanuit de ingebouwde browser van de Claude-app falen sinds vandaag direct met "Kaggle Error" (en de notebook-
+editor blijft daar leeg); vermoedelijk Kaggles bot-detectie (reCAPTCHA op de inzendknop). Afspraak: Ward dient zelf in,
+de assistent zet klaar en leest uit.
